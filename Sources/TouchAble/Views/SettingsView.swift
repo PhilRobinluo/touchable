@@ -64,13 +64,29 @@ struct SettingsView: View {
                         .frame(width: 18, alignment: .trailing)
                 }
 
-                Toggle("同一对象可重复触发", isOn: $preferences.repeatSameTargetEnabled)
+                Toggle("悬停保持时重复触发", isOn: $preferences.repeatSameTargetEnabled)
                     .localPulse(zone: .control, identity: "settings-repeat")
                     .onChange(of: preferences.repeatSameTargetEnabled) { _, _ in
                         pulse(.control, "settings-repeat-change")
                     }
 
-                Text("公开 API 不支持直接调电机力度；这里通过更多脉冲、更紧节奏和混合模式模拟强弱。6-8 档偏调试增强。")
+                if preferences.repeatSameTargetEnabled {
+                    HStack {
+                        Text("重复间隔")
+                        Slider(value: $preferences.hoverRepeatInterval, in: 0.25...2.0, step: 0.05) {
+                            Text("重复间隔")
+                        }
+                        .localPulse(zone: .adjustable, identity: "settings-repeat-interval")
+                        .onChange(of: preferences.hoverRepeatInterval) { _, newValue in
+                            pulse(.adjustable, "settings-repeat-interval-\(Int((newValue * 100).rounded()))")
+                        }
+                        Text(String(format: "%.2fs", preferences.hoverRepeatInterval))
+                            .monospacedDigit()
+                            .frame(width: 48, alignment: .trailing)
+                    }
+                }
+
+                Text("悬停重复默认关闭，避免光标停在按钮上一直震。公开 API 不支持直接调电机力度；这里通过更多脉冲、更紧节奏和混合模式模拟强弱。6-8 档偏调试增强。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

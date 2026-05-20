@@ -12,6 +12,7 @@ final class PreferenceStore: ObservableObject {
         static let strength = "strength"
         static let intensityLevel = "intensityLevel"
         static let repeatSameTargetEnabled = "repeatSameTargetEnabled"
+        static let hoverRepeatInterval = "hoverRepeatInterval"
     }
 
     private let defaults: UserDefaults
@@ -48,6 +49,10 @@ final class PreferenceStore: ObservableObject {
         didSet { defaults.set(repeatSameTargetEnabled, forKey: Key.repeatSameTargetEnabled) }
     }
 
+    @Published var hoverRepeatInterval: Double {
+        didSet { defaults.set(hoverRepeatInterval, forKey: Key.hoverRepeatInterval) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
@@ -63,13 +68,16 @@ final class PreferenceStore: ObservableObject {
         let savedIntensity = defaults.object(forKey: Key.intensityLevel) as? Int ?? 5
         intensityLevel = Double(max(1, min(8, savedIntensity)))
         repeatSameTargetEnabled = defaults.object(forKey: Key.repeatSameTargetEnabled) as? Bool ?? false
+        let savedHoverRepeatInterval = defaults.object(forKey: Key.hoverRepeatInterval) as? Double ?? 1.1
+        hoverRepeatInterval = max(0.25, min(2.0, savedHoverRepeatInterval))
     }
 
     var profile: HapticProfile {
         HapticProfile.default(
             for: strength,
             intensityLevel: Int(intensityLevel.rounded()),
-            repeatSameTarget: repeatSameTargetEnabled
+            repeatSameTarget: repeatSameTargetEnabled,
+            sameTargetRepeatInterval: hoverRepeatInterval
         )
     }
 }

@@ -34,10 +34,13 @@ public struct HapticProfile: Equatable {
     public static func `default`(
         for strength: HapticStrength,
         intensityLevel: Int = 3,
-        repeatSameTarget: Bool = false
+        repeatSameTarget: Bool = false,
+        sameTargetRepeatInterval: TimeInterval? = nil
     ) -> HapticProfile {
         let clampedIntensity = max(1, min(8, intensityLevel))
-        let repeatInterval = repeatSameTarget ? sameIdentityRepeatInterval(for: clampedIntensity) : nil
+        let repeatInterval = repeatSameTarget
+            ? max(0.25, min(2.0, sameTargetRepeatInterval ?? defaultSameIdentityRepeatInterval(for: clampedIntensity)))
+            : nil
 
         switch strength {
         case .gentle:
@@ -118,7 +121,7 @@ public struct HapticProfile: Equatable {
         }
     }
 
-    private static func sameIdentityRepeatInterval(for intensityLevel: Int) -> TimeInterval {
+    private static func defaultSameIdentityRepeatInterval(for intensityLevel: Int) -> TimeInterval {
         switch intensityLevel {
         case 1:
             return 1.2

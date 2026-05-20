@@ -48,12 +48,39 @@ final class HapticProfileTests: XCTestCase {
         XCTAssertEqual(on.sameIdentityRepeatInterval, 0.65)
     }
 
-    func testHighIntensityUsesFastDensePulses() {
+    func testRepeatSameTargetCanUseCustomHoverInterval() {
+        let profile = HapticProfile.default(
+            for: .standard,
+            intensityLevel: 3,
+            repeatSameTarget: true,
+            sameTargetRepeatInterval: 1.1
+        )
+
+        XCTAssertEqual(profile.sameIdentityRepeatInterval, 1.1)
+    }
+
+    func testCustomHoverIntervalIsClampedForDebugSafety() {
+        let tooFast = HapticProfile.default(
+            for: .standard,
+            repeatSameTarget: true,
+            sameTargetRepeatInterval: 0.01
+        )
+        let tooSlow = HapticProfile.default(
+            for: .standard,
+            repeatSameTarget: true,
+            sameTargetRepeatInterval: 9
+        )
+
+        XCTAssertEqual(tooFast.sameIdentityRepeatInterval, 0.25)
+        XCTAssertEqual(tooSlow.sameIdentityRepeatInterval, 2.0)
+    }
+
+    func testHighIntensityUsesDensePulsesWithSafeRepeatFloor() {
         let profile = HapticProfile.default(for: .obvious, intensityLevel: 8, repeatSameTarget: true)
 
         XCTAssertEqual(profile.intensityLevel, 8)
         XCTAssertEqual(profile.pulseCount, 8)
         XCTAssertEqual(profile.pulseSpacing, 0.028)
-        XCTAssertEqual(profile.sameIdentityRepeatInterval, 0.12)
+        XCTAssertEqual(profile.sameIdentityRepeatInterval, 0.25)
     }
 }

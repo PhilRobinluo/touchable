@@ -74,7 +74,7 @@ struct DebugView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("手感调试")
                     .font(.headline)
-                Text("先把强度调到 7 或 8，再打开重复触发，确认你能稳定感受到。")
+                Text("先把强度调到 7 或 8，确认你能稳定感受到；悬停重复默认建议关闭。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -97,7 +97,19 @@ struct DebugView: View {
                     .frame(width: 24, alignment: .trailing)
             }
 
-            Toggle("同一对象隔一小段时间可以再次触发", isOn: $preferences.repeatSameTargetEnabled)
+            Toggle("悬停保持时重复触发", isOn: $preferences.repeatSameTargetEnabled)
+            if preferences.repeatSameTargetEnabled {
+                HStack(spacing: 12) {
+                    Text("重复间隔")
+                        .frame(width: 72, alignment: .leading)
+
+                    Slider(value: $preferences.hoverRepeatInterval, in: 0.25...2.0, step: 0.05)
+
+                    Text(String(format: "%.2fs", preferences.hoverRepeatInterval))
+                        .font(.body.monospacedDigit())
+                        .frame(width: 52, alignment: .trailing)
+                }
+            }
             Toggle("启用点击 / 拖拽 / 滚动触感", isOn: $preferences.pointerEventHapticsEnabled)
             Toggle("启用光标形状触感", isOn: $preferences.cursorHapticsEnabled)
 

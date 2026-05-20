@@ -90,6 +90,7 @@ swift prototypes/semantic-haptic-demo.swift 45
 下一次继续策划时，优先读：
 
 - [docs/next-session-brief.md](docs/next-session-brief.md)
+- [docs/private-beta-roadmap.md](docs/private-beta-roadmap.md)
 - [docs/product-brief.md](docs/product-brief.md)
 - [docs/raw-discussion.md](docs/raw-discussion.md)
 - [TASKS.md](TASKS.md)

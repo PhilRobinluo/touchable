@@ -2,7 +2,7 @@
 
 ## 当前阶段
 
-从“惊艳脚本原型”推进到“正经产品策划”。
+从“惊艳脚本原型”推进到“可长期打开的开源 macOS 菜单栏 App”。
 
 ## 已完成
 
@@ -53,3 +53,12 @@
 - [x] 增加全局操作触感：点击、拖拽、滚动。
 - [x] 本地打包固定签名标识 `com.philrobin.TouchAble`，提升辅助功能权限稳定性。
 - [x] 开发运行固定安装到 `~/Applications/TouchAble.app`，方便 macOS 输入监控和辅助功能授权。
+- [x] 切换为开源项目，补齐公开 README、roadmap、project history 和 MIT License。
+
+## 下一阶段：开源打磨
+
+- [ ] 降低普通模式 CPU 消耗。
+- [ ] 继续降低触感延迟，让 UI 变化第一时间可感。
+- [ ] 梳理调试参数，区分普通用户设置和开发者调试设置。
+- [ ] 增加版本号、About 和隐私说明界面。
+- [ ] 做正式 release packaging、Developer ID 签名、公证和 DMG。

@@ -3,3 +3,7 @@
 dist/
 DerivedData/
 *.xcuserstate
+.env
+.env.*
+*.pem
+*.p8

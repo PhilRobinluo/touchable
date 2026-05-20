@@ -13,6 +13,9 @@ final class PreferenceStore: ObservableObject {
         static let intensityLevel = "intensityLevel"
         static let repeatSameTargetEnabled = "repeatSameTargetEnabled"
         static let hoverRepeatInterval = "hoverRepeatInterval"
+        static let pointerPollingHertz = "pointerPollingHertz"
+        static let hapticMinimumInterval = "hapticMinimumInterval"
+        static let pointerEventDelay = "pointerEventDelay"
     }
 
     private let defaults: UserDefaults
@@ -53,6 +56,18 @@ final class PreferenceStore: ObservableObject {
         didSet { defaults.set(hoverRepeatInterval, forKey: Key.hoverRepeatInterval) }
     }
 
+    @Published var pointerPollingHertz: Double {
+        didSet { defaults.set(pointerPollingHertz, forKey: Key.pointerPollingHertz) }
+    }
+
+    @Published var hapticMinimumInterval: Double {
+        didSet { defaults.set(hapticMinimumInterval, forKey: Key.hapticMinimumInterval) }
+    }
+
+    @Published var pointerEventDelay: Double {
+        didSet { defaults.set(pointerEventDelay, forKey: Key.pointerEventDelay) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
@@ -70,6 +85,12 @@ final class PreferenceStore: ObservableObject {
         repeatSameTargetEnabled = defaults.object(forKey: Key.repeatSameTargetEnabled) as? Bool ?? false
         let savedHoverRepeatInterval = defaults.object(forKey: Key.hoverRepeatInterval) as? Double ?? 1.1
         hoverRepeatInterval = max(0.25, min(2.0, savedHoverRepeatInterval))
+        let savedPollingHertz = defaults.object(forKey: Key.pointerPollingHertz) as? Double ?? 30
+        pointerPollingHertz = max(10, min(80, savedPollingHertz))
+        let savedMinimumInterval = defaults.object(forKey: Key.hapticMinimumInterval) as? Double ?? 0.08
+        hapticMinimumInterval = max(0.04, min(0.35, savedMinimumInterval))
+        let savedPointerEventDelay = defaults.object(forKey: Key.pointerEventDelay) as? Double ?? 0
+        pointerEventDelay = max(0, min(0.2, savedPointerEventDelay))
     }
 
     var profile: HapticProfile {
@@ -77,7 +98,12 @@ final class PreferenceStore: ObservableObject {
             for: strength,
             intensityLevel: Int(intensityLevel.rounded()),
             repeatSameTarget: repeatSameTargetEnabled,
-            sameTargetRepeatInterval: hoverRepeatInterval
+            sameTargetRepeatInterval: hoverRepeatInterval,
+            minimumIntervalOverride: hapticMinimumInterval
         )
+    }
+
+    var pointerPollingInterval: TimeInterval {
+        1.0 / max(10, min(80, pointerPollingHertz))
     }
 }

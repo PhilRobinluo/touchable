@@ -35,9 +35,11 @@ public struct HapticProfile: Equatable {
         for strength: HapticStrength,
         intensityLevel: Int = 3,
         repeatSameTarget: Bool = false,
-        sameTargetRepeatInterval: TimeInterval? = nil
+        sameTargetRepeatInterval: TimeInterval? = nil,
+        minimumIntervalOverride: TimeInterval? = nil
     ) -> HapticProfile {
         let clampedIntensity = max(1, min(8, intensityLevel))
+        let overrideMinimumInterval = minimumIntervalOverride.map { max(0.04, min(0.35, $0)) }
         let repeatInterval = repeatSameTarget
             ? max(0.25, min(2.0, sameTargetRepeatInterval ?? defaultSameIdentityRepeatInterval(for: clampedIntensity)))
             : nil
@@ -46,7 +48,7 @@ public struct HapticProfile: Equatable {
         case .gentle:
             return HapticProfile(
                 strength: strength,
-                minimumInterval: 0.28,
+                minimumInterval: overrideMinimumInterval ?? 0.28,
                 edgeBand: 22,
                 enabledZones: [.edge, .control, .link, .input, .adjustable],
                 intensityLevel: clampedIntensity,
@@ -57,7 +59,7 @@ public struct HapticProfile: Equatable {
         case .standard:
             return HapticProfile(
                 strength: strength,
-                minimumInterval: 0.18,
+                minimumInterval: overrideMinimumInterval ?? 0.18,
                 edgeBand: 28,
                 enabledZones: [.edge, .control, .link, .input, .text, .adjustable],
                 intensityLevel: clampedIntensity,
@@ -68,7 +70,7 @@ public struct HapticProfile: Equatable {
         case .obvious:
             return HapticProfile(
                 strength: strength,
-                minimumInterval: 0.12,
+                minimumInterval: overrideMinimumInterval ?? 0.12,
                 edgeBand: 40,
                 enabledZones: [.edge, .control, .link, .input, .text, .adjustable],
                 intensityLevel: clampedIntensity,

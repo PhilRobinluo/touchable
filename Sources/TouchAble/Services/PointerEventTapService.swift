@@ -17,7 +17,6 @@ final class PointerEventTapService {
         guard permission.isTrusted else { return false }
 
         let mask =
-            (1 << CGEventType.mouseMoved.rawValue) |
             (1 << CGEventType.leftMouseDown.rawValue) |
             (1 << CGEventType.leftMouseUp.rawValue) |
             (1 << CGEventType.leftMouseDragged.rawValue) |

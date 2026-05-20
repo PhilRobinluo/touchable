@@ -91,6 +91,45 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("响应调试") {
+                HStack {
+                    Text("光标轮询")
+                    Slider(value: $preferences.pointerPollingHertz, in: 10...80, step: 5) {
+                        Text("光标轮询")
+                    }
+                    .localPulse(zone: .adjustable, identity: "settings-polling-rate")
+                    Text("\(Int(preferences.pointerPollingHertz.rounded()))Hz")
+                        .monospacedDigit()
+                        .frame(width: 48, alignment: .trailing)
+                }
+
+                HStack {
+                    Text("节流间隔")
+                    Slider(value: $preferences.hapticMinimumInterval, in: 0.04...0.35, step: 0.01) {
+                        Text("节流间隔")
+                    }
+                    .localPulse(zone: .adjustable, identity: "settings-minimum-interval")
+                    Text(String(format: "%.2fs", preferences.hapticMinimumInterval))
+                        .monospacedDigit()
+                        .frame(width: 48, alignment: .trailing)
+                }
+
+                HStack {
+                    Text("操作延时")
+                    Slider(value: $preferences.pointerEventDelay, in: 0...0.2, step: 0.01) {
+                        Text("操作延时")
+                    }
+                    .localPulse(zone: .adjustable, identity: "settings-event-delay")
+                    Text(String(format: "%.2fs", preferences.pointerEventDelay))
+                        .monospacedDigit()
+                        .frame(width: 48, alignment: .trailing)
+                }
+
+                Text("v0.x 先把跟手感完全打开给我们调。轮询越高越跟手，也越可能吃 CPU；节流越短越敏感，也越容易密。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("辅助功能权限") {
                 HStack {
                     Label(

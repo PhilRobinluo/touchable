@@ -74,7 +74,7 @@ struct DebugView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("手感调试")
                     .font(.headline)
-                Text("先把强度调到 7 或 8，确认你能稳定感受到；悬停重复默认建议关闭。")
+                Text("v0.x 先完全打开调参。轮询越高越跟手，也越可能吃 CPU。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -110,6 +110,42 @@ struct DebugView: View {
                         .frame(width: 52, alignment: .trailing)
                 }
             }
+
+            Divider()
+
+            HStack(spacing: 12) {
+                Text("光标轮询")
+                    .frame(width: 72, alignment: .leading)
+
+                Slider(value: $preferences.pointerPollingHertz, in: 10...80, step: 5)
+
+                Text("\(Int(preferences.pointerPollingHertz.rounded()))Hz")
+                    .font(.body.monospacedDigit())
+                    .frame(width: 52, alignment: .trailing)
+            }
+
+            HStack(spacing: 12) {
+                Text("节流间隔")
+                    .frame(width: 72, alignment: .leading)
+
+                Slider(value: $preferences.hapticMinimumInterval, in: 0.04...0.35, step: 0.01)
+
+                Text(String(format: "%.2fs", preferences.hapticMinimumInterval))
+                    .font(.body.monospacedDigit())
+                    .frame(width: 52, alignment: .trailing)
+            }
+
+            HStack(spacing: 12) {
+                Text("操作延时")
+                    .frame(width: 72, alignment: .leading)
+
+                Slider(value: $preferences.pointerEventDelay, in: 0...0.2, step: 0.01)
+
+                Text(String(format: "%.2fs", preferences.pointerEventDelay))
+                    .font(.body.monospacedDigit())
+                    .frame(width: 52, alignment: .trailing)
+            }
+
             Toggle("启用点击 / 拖拽 / 滚动触感", isOn: $preferences.pointerEventHapticsEnabled)
             Toggle("启用光标形状触感", isOn: $preferences.cursorHapticsEnabled)
 

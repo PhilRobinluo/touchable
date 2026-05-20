@@ -75,6 +75,20 @@ final class HapticProfileTests: XCTestCase {
         XCTAssertEqual(tooSlow.sameIdentityRepeatInterval, 2.0)
     }
 
+    func testMinimumIntervalCanBeOverriddenForLatencyTuning() {
+        let profile = HapticProfile.default(for: .standard, minimumIntervalOverride: 0.08)
+
+        XCTAssertEqual(profile.minimumInterval, 0.08)
+    }
+
+    func testMinimumIntervalOverrideIsClampedForDebugSafety() {
+        let tooFast = HapticProfile.default(for: .standard, minimumIntervalOverride: 0.01)
+        let tooSlow = HapticProfile.default(for: .standard, minimumIntervalOverride: 1)
+
+        XCTAssertEqual(tooFast.minimumInterval, 0.04)
+        XCTAssertEqual(tooSlow.minimumInterval, 0.35)
+    }
+
     func testHighIntensityUsesDensePulsesWithSafeRepeatFloor() {
         let profile = HapticProfile.default(for: .obvious, intensityLevel: 8, repeatSameTarget: true)
 

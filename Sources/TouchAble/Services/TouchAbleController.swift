@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import TouchAbleCore
 
@@ -31,14 +32,19 @@ final class TouchAbleController: ObservableObject {
     private let playgroundThrottler = HapticThrottler()
 
     private var timer: Timer?
+    private var cancellables: Set<AnyCancellable> = []
     private var tickCount = 0
     private var pointerEventCounter = 0
+    private var lastSemanticProbeLocation: CGPoint?
+    private var lastSemanticProbeResult: SemanticProbeResult?
+    private var lastSemanticProbeDate: Date = .distantPast
 
     init(preferences: PreferenceStore) {
         self.preferences = preferences
         accessibilityTrusted = accessibility.isTrusted
         inputMonitoringTrusted = inputMonitoring.isTrusted
         configurePointerEvents()
+        observeTimingPreferences()
         start()
     }
 
@@ -50,7 +56,7 @@ final class TouchAbleController: ObservableObject {
     func start() {
         guard timer == nil else { return }
 
-        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: preferences.pointerPollingInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.tick()
             }
@@ -59,6 +65,28 @@ final class TouchAbleController: ObservableObject {
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
         isRunning = true
+    }
+
+    private func restartTimer() {
+        timer?.invalidate()
+        timer = nil
+        isRunning = false
+        start()
+        record(
+            title: "刷新轮询",
+            detail: "光标轮询 \(Int(preferences.pointerPollingHertz.rounded()))Hz",
+            zone: nil
+        )
+    }
+
+    private func observeTimingPreferences() {
+        preferences.$pointerPollingHertz
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.restartTimer()
+            }
+            .store(in: &cancellables)
     }
 
     func requestAccessibilityPermission() {
@@ -133,11 +161,12 @@ final class TouchAbleController: ObservableObject {
         guard eventThrottler.shouldPulse(signal: signal, profile: profile) else { return }
 
         let detail = "全局\(kind.displayName): x \(Int(location.x)), y \(Int(location.y))"
-        if kind.hapticDelay > 0 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + kind.hapticDelay) { [weak self] in
+        let hapticDelay = max(0, min(0.2, preferences.pointerEventDelay))
+        if hapticDelay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + hapticDelay) { [weak self] in
                 guard let self else { return }
                 self.haptics.perform(zone: zone, profile: profile)
-                self.recordPulse(zone: zone, detail: "\(detail) · 延迟\(String(format: "%.2f", kind.hapticDelay))s")
+                self.recordPulse(zone: zone, detail: "\(detail) · 延迟\(String(format: "%.2f", hapticDelay))s")
             }
         } else {
             haptics.perform(zone: zone, profile: profile)
@@ -152,7 +181,8 @@ final class TouchAbleController: ObservableObject {
 
     private func tick() {
         tickCount += 1
-        if tickCount % 20 == 0 {
+        let permissionRefreshTicks = max(10, Int(preferences.pointerPollingHertz.rounded()))
+        if tickCount % permissionRefreshTicks == 0 {
             refreshAccessibilityStatus()
             refreshInputMonitoringStatus()
             if inputMonitoringTrusted {
@@ -165,8 +195,8 @@ final class TouchAbleController: ObservableObject {
         guard preferences.isEnabled else {
             throttler.reset()
             lastZone = .quiet
-            candidateDescription = "总开关关闭"
-            lastDecision = "未运行"
+            setText(\.candidateDescription, "总开关关闭")
+            setText(\.lastDecision, "未运行")
             return
         }
 
@@ -182,7 +212,7 @@ final class TouchAbleController: ObservableObject {
         }
 
         let decision = throttler.decision(for: signal, profile: profile)
-        lastDecision = decision.displayReason
+        setText(\.lastDecision, decision.displayReason)
         guard decision == .allowed else { return }
         guard throttler.shouldPulse(signal: signal, profile: profile) else { return }
 
@@ -198,25 +228,25 @@ final class TouchAbleController: ObservableObject {
             in: NSScreen.screens.map(\.frame),
             profile: profile
            ) {
-            semanticRole = "未探测"
-            candidateDescription = "边缘命中: \(edgeSignal.identity)"
-            lastDecision = "等待节流判断"
+            setText(\.semanticRole, "未探测")
+            setText(\.candidateDescription, "边缘命中: \(edgeSignal.identity)")
+            setText(\.lastDecision, "等待节流判断")
             return edgeSignal
         }
 
         guard preferences.semanticHapticsEnabled,
               accessibilityTrusted
         else {
-            semanticRole = accessibilityTrusted ? "语义开关关闭" : "未授权"
+            setText(\.semanticRole, accessibilityTrusted ? "语义开关关闭" : "未授权")
             return currentCursorSignalOrNil(profile: profile, fallbackReason: accessibilityTrusted ? "语义触感关闭" : "需要辅助功能权限")
         }
 
-        let result = semanticProbe.currentResult(profile: profile)
-        semanticRole = result.role
+        let result = cachedSemanticResult(profile: profile)
+        setText(\.semanticRole, result.role)
 
         if let signal = result.signal {
-            candidateDescription = result.reason
-            lastDecision = "等待节流判断"
+            setText(\.candidateDescription, result.reason)
+            setText(\.lastDecision, "等待节流判断")
             return signal
         }
 
@@ -253,37 +283,70 @@ final class TouchAbleController: ObservableObject {
 
     private func updatePointerDescription() {
         let point = NSEvent.mouseLocation
-        pointerDescription = "x \(Int(point.x)), y \(Int(point.y))"
+        let nextDescription = "x \(Int(point.x)), y \(Int(point.y))"
+        if pointerDescription != nextDescription {
+            pointerDescription = nextDescription
+        }
     }
 
     private func updateCursorDescription(profile: HapticProfile) {
-        cursorDescription = cursorProbe.currentResult(profile: profile).name
+        let nextDescription = cursorProbe.currentResult(profile: profile).name
+        if cursorDescription != nextDescription {
+            cursorDescription = nextDescription
+        }
     }
 
     private func currentCursorSignalOrNil(profile: HapticProfile, fallbackReason: String) -> HapticSignal? {
         guard preferences.cursorHapticsEnabled else {
-            candidateDescription = fallbackReason
-            lastDecision = "光标触感关闭"
+            setText(\.candidateDescription, fallbackReason)
+            setText(\.lastDecision, "光标触感关闭")
             return nil
         }
 
         let result = cursorProbe.currentResult(profile: profile)
 
         guard let signal = result.signal else {
-            candidateDescription = "\(fallbackReason)；光标 \(result.reason)"
-            lastDecision = "无候选触觉"
+            setText(\.candidateDescription, "\(fallbackReason)；光标 \(result.reason)")
+            setText(\.lastDecision, "无候选触觉")
             return nil
         }
 
-        candidateDescription = result.reason
-        lastDecision = "等待节流判断"
+        setText(\.candidateDescription, result.reason)
+        setText(\.lastDecision, "等待节流判断")
         return signal
     }
 
     private func updateProfileDescription(_ profile: HapticProfile) {
         let repeatText = profile.sameIdentityRepeatInterval.map { String(format: "%.2fs", $0) } ?? "关闭"
         let modeText = profile.intensityLevel >= 6 ? "增强混合" : "标准"
-        profileDescription = "强度 \(profile.intensityLevel) · \(profile.pulseCount) 次脉冲 · \(modeText) · 重触发 \(repeatText)"
+        let nextDescription = "强度 \(profile.intensityLevel) · \(profile.pulseCount) 次脉冲 · \(modeText) · 节流 \(String(format: "%.2fs", profile.minimumInterval)) · 轮询 \(Int(preferences.pointerPollingHertz.rounded()))Hz · 操作延时 \(String(format: "%.2fs", preferences.pointerEventDelay)) · 重触发 \(repeatText)"
+        if profileDescription != nextDescription {
+            profileDescription = nextDescription
+        }
+    }
+
+    private func cachedSemanticResult(profile: HapticProfile) -> SemanticProbeResult {
+        let location = NSEvent.mouseLocation
+        let now = Date()
+        if let lastSemanticProbeLocation,
+           let lastSemanticProbeResult,
+           abs(lastSemanticProbeLocation.x - location.x) < 3,
+           abs(lastSemanticProbeLocation.y - location.y) < 3,
+           now.timeIntervalSince(lastSemanticProbeDate) < 0.5 {
+            return lastSemanticProbeResult
+        }
+
+        let result = semanticProbe.currentResult(profile: profile)
+        lastSemanticProbeLocation = location
+        lastSemanticProbeResult = result
+        lastSemanticProbeDate = now
+        return result
+    }
+
+    private func setText(_ keyPath: ReferenceWritableKeyPath<TouchAbleController, String>, _ value: String) {
+        if self[keyPath: keyPath] != value {
+            self[keyPath: keyPath] = value
+        }
     }
 
     private func recordPulse(zone: HapticZone, detail: String) {

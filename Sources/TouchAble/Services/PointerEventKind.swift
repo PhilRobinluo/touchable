@@ -19,17 +19,6 @@ enum PointerEventKind: String {
         }
     }
 
-    var hapticDelay: TimeInterval {
-        switch self {
-        case .released:
-            return 0.08
-        case .dragged, .scrolled:
-            return 0
-        case .moved, .pressed:
-            return 0
-        }
-    }
-
     var displayName: String {
         switch self {
         case .moved:

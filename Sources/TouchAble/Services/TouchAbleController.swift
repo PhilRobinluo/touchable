@@ -13,6 +13,9 @@ final class TouchAbleController: ObservableObject {
     @Published private(set) var cursorDescription = "未读取"
     @Published private(set) var semanticRole = "未探测"
     @Published private(set) var inputSourceDescription = "未识别"
+    @Published private(set) var inputDeviceDescription = "未识别"
+    @Published private(set) var inputSourceEventDescription = "未收到"
+    @Published private(set) var knownPointerDevicesDescription = "未识别"
     @Published private(set) var pointerEventDescription = "未收到"
     @Published private(set) var threeFingerShortcutDescription = "未启用"
     @Published private(set) var candidateDescription = "等待"
@@ -182,6 +185,11 @@ final class TouchAbleController: ObservableObject {
     private func configurePointerSourceMonitoring() {
         pointerSource.onDebugEvent = { [weak self] detail in
             self?.record(title: "输入来源探针", detail: detail, zone: nil)
+        }
+        pointerSource.onStateChange = { [weak self] device, event, devices in
+            self?.setText(\.inputDeviceDescription, device)
+            self?.setText(\.inputSourceEventDescription, event)
+            self?.setText(\.knownPointerDevicesDescription, devices)
         }
 
         let started = pointerSource.start()

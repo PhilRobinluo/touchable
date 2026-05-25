@@ -86,3 +86,5 @@ test -x "$RELEASE_DIR/verify-unzip/$APP_NAME.app/Contents/MacOS/$APP_NAME"
 rm -rf "$RELEASE_DIR/verify-unzip"
 
 echo "Created package: $ZIP_PATH"
+echo "Package size: $(/usr/bin/du -h "$ZIP_PATH" | awk '{print $1}')"
+echo "SHA256: $(/usr/bin/shasum -a 256 "$ZIP_PATH" | awk '{print $1}')"

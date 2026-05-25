@@ -26,6 +26,8 @@ The repository is open source so the idea can be explored in public.
 - Optional scroll haptics, disabled by default.
 - Trackpad-only global haptics, enabled by default, so mouse input does not
   waste haptic feedback or battery.
+- HID-level pointer source detection for distinguishing mouse movement from
+  internal trackpad activity.
 - Configurable three-finger trackpad press shortcut mapping.
 - Cursor-shape haptics for I-beam, pointing hand, drag, resize, and related
   cursor transitions.
@@ -44,6 +46,8 @@ TouchAble is designed to use the narrowest data needed for haptic feedback:
 - Raw trackpad finger count for three-finger shortcut mapping.
 - Recent raw trackpad activity to ignore mouse-driven global haptic triggers by
   default.
+- HID pointer device metadata such as manufacturer, product, and transport, used
+  only to classify input as mouse, trackpad, or unknown.
 - Accessibility role/subrole/action metadata for the UI element under the
   pointer.
 
@@ -72,6 +76,9 @@ contains `TouchAble.app`, signed with the local `TouchAble Local Dev` identity
 when available, or ad-hoc signed as a fallback. It is not notarized by Apple, so
 first launch on another Mac may require opening it from Finder with
 Control-click > Open or allowing it in System Settings.
+
+The packaging script verifies the unzipped app executable and prints package
+size plus a SHA-256 checksum for release notes.
 
 ## Build And Run
 
@@ -118,6 +125,7 @@ For local development, you can create a stable self-signed code-signing identity
 - [Open roadmap](docs/roadmap.md)
 - [Implementation study](docs/implementation-study.md)
 - [Semantic haptics plan](docs/semantic-haptics-plan.md)
+- [Compatibility checklist](docs/compatibility.md)
 - [Project history](docs/project-history.md)
 - [Task list](TASKS.md)
 

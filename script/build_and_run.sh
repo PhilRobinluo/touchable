@@ -57,11 +57,11 @@ cat >"$INFO_PLIST" <<PLIST
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
   <key>NSAppleEventsUsageDescription</key>
-  <string>TouchAble uses macOS accessibility APIs only to detect the type of UI element under the pointer.</string>
+  <string>TouchAble posts configured keyboard shortcuts for explicit gesture mappings.</string>
   <key>NSAccessibilityUsageDescription</key>
   <string>TouchAble uses accessibility only to detect whether the pointer is over a button, link, text, input field, or similar UI role.</string>
   <key>NSInputMonitoringUsageDescription</key>
-  <string>TouchAble uses input monitoring only to detect mouse clicks, drags, and scrolls for haptic feedback.</string>
+  <string>TouchAble uses input monitoring only to detect pointer actions and pointer device source for haptic feedback.</string>
   <key>NSHumanReadableCopyright</key>
   <string>Local internal build</string>
 </dict>

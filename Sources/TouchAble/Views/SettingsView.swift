@@ -8,7 +8,7 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("运行") {
+            Section("常用设置") {
                 Toggle("启用 TouchAble", isOn: $preferences.isEnabled)
                     .localPulse(zone: .control, identity: "settings-enable")
                     .onChange(of: preferences.isEnabled) { _, _ in
@@ -49,6 +49,13 @@ struct SettingsView: View {
                     .onChange(of: preferences.threeFingerShortcutEnabled) { _, _ in
                         pulse(.control, "settings-three-finger-shortcut-change")
                     }
+
+                HStack {
+                    Text("输入来源")
+                    Spacer()
+                    Text(controller.inputSourceDescription)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("三指快捷键") {
@@ -117,70 +124,94 @@ struct SettingsView: View {
                         .frame(width: 18, alignment: .trailing)
                 }
 
-                Toggle("悬停保持时重复触发", isOn: $preferences.repeatSameTargetEnabled)
-                    .localPulse(zone: .control, identity: "settings-repeat")
-                    .onChange(of: preferences.repeatSameTargetEnabled) { _, _ in
-                        pulse(.control, "settings-repeat-change")
-                    }
-
-                if preferences.repeatSameTargetEnabled {
-                    HStack {
-                        Text("重复间隔")
-                        Slider(value: $preferences.hoverRepeatInterval, in: 0.25...2.0, step: 0.05) {
-                            Text("重复间隔")
-                        }
-                        .localPulse(zone: .adjustable, identity: "settings-repeat-interval")
-                        .onChange(of: preferences.hoverRepeatInterval) { _, newValue in
-                            pulse(.adjustable, "settings-repeat-interval-\(Int((newValue * 100).rounded()))")
-                        }
-                        Text(String(format: "%.2fs", preferences.hoverRepeatInterval))
-                            .monospacedDigit()
-                            .frame(width: 48, alignment: .trailing)
-                    }
-                }
-
-                Text("悬停重复默认关闭，避免光标停在按钮上一直震。仅触控板触发默认开启：使用鼠标移动、点击或滚动时不会触发全局触感。公开 API 不支持直接调电机力度；这里通过更多脉冲、更紧节奏和混合模式模拟强弱。6-8 档偏调试增强。")
+                Text("仅触控板触发默认开启：使用鼠标移动、点击或滚动时不会触发全局触感。公开 API 不支持直接调电机力度；这里通过更多脉冲、更紧节奏和混合模式模拟强弱。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("响应调试") {
-                HStack {
-                    Text("光标轮询")
-                    Slider(value: $preferences.pointerPollingHertz, in: 10...80, step: 5) {
+            Section("高级调试") {
+                DisclosureGroup("响应参数") {
+                    HStack {
                         Text("光标轮询")
+                        Slider(value: $preferences.pointerPollingHertz, in: 10...80, step: 5) {
+                            Text("光标轮询")
+                        }
+                        .localPulse(zone: .adjustable, identity: "settings-polling-rate")
+                        Text("\(Int(preferences.pointerPollingHertz.rounded()))Hz")
+                            .monospacedDigit()
+                            .frame(width: 48, alignment: .trailing)
                     }
-                    .localPulse(zone: .adjustable, identity: "settings-polling-rate")
-                    Text("\(Int(preferences.pointerPollingHertz.rounded()))Hz")
-                        .monospacedDigit()
-                        .frame(width: 48, alignment: .trailing)
-                }
 
-                HStack {
-                    Text("节流间隔")
-                    Slider(value: $preferences.hapticMinimumInterval, in: 0.04...0.35, step: 0.01) {
+                    HStack {
                         Text("节流间隔")
+                        Slider(value: $preferences.hapticMinimumInterval, in: 0.04...0.35, step: 0.01) {
+                            Text("节流间隔")
+                        }
+                        .localPulse(zone: .adjustable, identity: "settings-minimum-interval")
+                        Text(String(format: "%.2fs", preferences.hapticMinimumInterval))
+                            .monospacedDigit()
+                            .frame(width: 48, alignment: .trailing)
                     }
-                    .localPulse(zone: .adjustable, identity: "settings-minimum-interval")
-                    Text(String(format: "%.2fs", preferences.hapticMinimumInterval))
-                        .monospacedDigit()
-                        .frame(width: 48, alignment: .trailing)
-                }
 
-                HStack {
-                    Text("操作延时")
-                    Slider(value: $preferences.pointerEventDelay, in: 0...0.2, step: 0.01) {
+                    HStack {
                         Text("操作延时")
+                        Slider(value: $preferences.pointerEventDelay, in: 0...0.2, step: 0.01) {
+                            Text("操作延时")
+                        }
+                        .localPulse(zone: .adjustable, identity: "settings-event-delay")
+                        Text(String(format: "%.2fs", preferences.pointerEventDelay))
+                            .monospacedDigit()
+                            .frame(width: 48, alignment: .trailing)
                     }
-                    .localPulse(zone: .adjustable, identity: "settings-event-delay")
-                    Text(String(format: "%.2fs", preferences.pointerEventDelay))
-                        .monospacedDigit()
-                        .frame(width: 48, alignment: .trailing)
+
+                    Toggle("悬停保持时重复触发", isOn: $preferences.repeatSameTargetEnabled)
+                        .localPulse(zone: .control, identity: "settings-repeat")
+                        .onChange(of: preferences.repeatSameTargetEnabled) { _, _ in
+                            pulse(.control, "settings-repeat-change")
+                        }
+
+                    if preferences.repeatSameTargetEnabled {
+                        HStack {
+                            Text("重复间隔")
+                            Slider(value: $preferences.hoverRepeatInterval, in: 0.25...2.0, step: 0.05) {
+                                Text("重复间隔")
+                            }
+                            .localPulse(zone: .adjustable, identity: "settings-repeat-interval")
+                            .onChange(of: preferences.hoverRepeatInterval) { _, newValue in
+                                pulse(.adjustable, "settings-repeat-interval-\(Int((newValue * 100).rounded()))")
+                            }
+                            Text(String(format: "%.2fs", preferences.hoverRepeatInterval))
+                                .monospacedDigit()
+                                .frame(width: 48, alignment: .trailing)
+                        }
+                    }
                 }
 
-                Text("v0.x 先把跟手感完全打开给我们调。轮询越高越跟手，也越可能吃 CPU；节流越短越敏感，也越容易密。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                DisclosureGroup("输入来源") {
+                    HStack {
+                        Text("当前来源")
+                        Spacer()
+                        Text(controller.inputSourceDescription)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Text("当前设备")
+                        Spacer()
+                        Text(controller.inputDeviceDescription)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.trailing)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("已识别设备")
+                        Text(controller.knownPointerDevicesDescription)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
             }
 
             Section("辅助功能权限") {

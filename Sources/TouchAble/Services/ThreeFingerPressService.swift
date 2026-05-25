@@ -186,7 +186,6 @@ final class ThreeFingerPressService {
     }
 
     private func emitDebug(_ detail: String) {
-        Self.appendDebugLine(detail)
         Self.logger.info("\(detail, privacy: .public)")
         DispatchQueue.main.async { [weak self] in
             self?.onDebugEvent?(detail)
@@ -208,21 +207,6 @@ final class ThreeFingerPressService {
             }
             .joined(separator: " | ")
         emitDebug("rawTouch · fingers \(fingerCount) · frame \(frame) · \(String(format: "%.3f", timestamp)) · \(contactSummary)")
-    }
-
-    private static func appendDebugLine(_ detail: String) {
-        let line = "\(Date()) \(detail)\n"
-        let url = URL(fileURLWithPath: "/tmp/touchable-threefinger.log")
-        guard let data = line.data(using: .utf8) else { return }
-
-        if FileManager.default.fileExists(atPath: url.path),
-           let handle = try? FileHandle(forWritingTo: url) {
-            defer { try? handle.close() }
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
-        } else {
-            try? data.write(to: url)
-        }
     }
 
     private static let touchCallback: MTContactCallbackFunction = { _, data, fingerCount, timestamp, frame in

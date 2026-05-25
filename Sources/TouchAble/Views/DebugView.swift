@@ -58,6 +58,9 @@ struct DebugView: View {
             DebugMetricCard(title: "辅助功能", value: controller.accessibilityTrusted ? "已授权" : "未授权", icon: controller.accessibilityTrusted ? "checkmark.shield.fill" : "exclamationmark.shield")
             DebugMetricCard(title: "输入监控", value: controller.inputMonitoringTrusted ? "已授权" : "未授权", icon: controller.inputMonitoringTrusted ? "checkmark.circle.fill" : "exclamationmark.circle")
             DebugMetricCard(title: "输入来源", value: controller.inputSourceDescription, icon: "rectangle.connected.to.line.below")
+            DebugMetricCard(title: "当前输入设备", value: controller.inputDeviceDescription, icon: "computermouse")
+            DebugMetricCard(title: "最近 HID 活动", value: controller.inputSourceEventDescription, icon: "waveform.path")
+            DebugMetricCard(title: "已识别设备", value: controller.knownPointerDevicesDescription, icon: "list.bullet.rectangle", lineLimit: 4)
             DebugMetricCard(title: "鼠标位置", value: controller.pointerDescription, icon: "cursorarrow.motionlines")
             DebugMetricCard(title: "最近操作", value: controller.pointerEventDescription, icon: "computermouse")
             DebugMetricCard(title: "三指快捷键", value: controller.threeFingerShortcutDescription, icon: "hand.tap")
@@ -244,6 +247,7 @@ private struct DebugMetricCard: View {
     let title: String
     let value: String
     let icon: String
+    var lineLimit = 2
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -257,7 +261,7 @@ private struct DebugMetricCard: View {
                     .foregroundStyle(.secondary)
                 Text(value)
                     .font(.body.monospacedDigit())
-                    .lineLimit(2)
+                    .lineLimit(lineLimit)
                     .textSelection(.enabled)
             }
 

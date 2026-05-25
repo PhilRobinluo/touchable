@@ -1,8 +1,10 @@
 import Foundation
 import IOKit.hid
+import TouchAbleCore
 
 final class PointerSourceService {
     var onDebugEvent: ((String) -> Void)?
+    var onStateChange: ((String, String, String) -> Void)?
 
     private static weak var activeService: PointerSourceService?
 
@@ -10,7 +12,9 @@ final class PointerSourceService {
     private var manager: IOHIDManager?
     private var lastExternalMouseActivityDate: Date = .distantPast
     private var lastExternalMouseDebugDate: Date = .distantPast
-    private var knownDevices: [IOHIDDevice: String] = [:]
+    private var knownDevices: [IOHIDDevice: PointerDeviceDescriptor] = [:]
+    private var lastDeviceDescription = "未识别"
+    private var lastEventDescription = "未收到"
 
     deinit {
         stop()
@@ -53,6 +57,9 @@ final class PointerSourceService {
         lock.withLock {
             knownDevices.removeAll()
             lastExternalMouseActivityDate = .distantPast
+            lastExternalMouseDebugDate = .distantPast
+            lastDeviceDescription = "未识别"
+            lastEventDescription = "未收到"
         }
 
         if Self.activeService === self {
@@ -75,13 +82,17 @@ final class PointerSourceService {
     }
 
     private func registerDevice(_ device: IOHIDDevice) {
-        let name = deviceName(device)
+        let descriptor = deviceDescriptor(device)
+        let name = descriptor.displayName
+        let kind = PointerDeviceClassifier.classify(descriptor)
         lock.withLock {
-            knownDevices[device] = name
+            knownDevices[device] = descriptor
+            lastDeviceDescription = summarizeKnownDevices()
         }
 
-        let kind = isTrackpadLikeDevice(device) ? "触控板类" : "鼠标类"
-        emitDebug("HID 设备 · \(kind) · \(name)")
+        let kindDescription = displayName(for: kind)
+        emitDebug("HID 设备 · \(kindDescription) · \(name)")
+        emitState()
     }
 
     private func handleInputValue(_ value: IOHIDValue) {
@@ -97,13 +108,16 @@ final class PointerSourceService {
 
         guard IOHIDValueGetIntegerValue(value) != 0 else { return }
         let device = IOHIDElementGetDevice(element)
-        guard !isTrackpadLikeDevice(device) else { return }
+        let descriptor = deviceDescriptor(device)
+        guard PointerDeviceClassifier.classify(descriptor) == .mouse else { return }
 
-        let deviceName = deviceName(device)
+        let deviceName = descriptor.displayName
         let valueDescription = "\(usageName(usage))=\(IOHIDValueGetIntegerValue(value))"
         let now = Date()
         let shouldEmit = lock.withLock {
             lastExternalMouseActivityDate = now
+            lastDeviceDescription = deviceName
+            lastEventDescription = "\(deviceName) · \(valueDescription)"
             let canEmit = now.timeIntervalSince(lastExternalMouseDebugDate) >= 0.5
             if canEmit {
                 lastExternalMouseDebugDate = now
@@ -114,27 +128,19 @@ final class PointerSourceService {
         if shouldEmit {
             emitDebug("HID 鼠标活动 · \(deviceName) · \(valueDescription)")
         }
+        emitState()
     }
 
-    private func isTrackpadLikeDevice(_ device: IOHIDDevice) -> Bool {
-        let name = deviceName(device).lowercased()
-        return name.contains("trackpad") ||
-            name.contains("touchpad") ||
-            name.contains("internal keyboard")
-    }
-
-    private func deviceName(_ device: IOHIDDevice) -> String {
+    private func deviceDescriptor(_ device: IOHIDDevice) -> PointerDeviceDescriptor {
         let product = stringProperty(kIOHIDProductKey as CFString, device: device)
         let manufacturer = stringProperty(kIOHIDManufacturerKey as CFString, device: device)
         let transport = stringProperty(kIOHIDTransportKey as CFString, device: device)
 
-        let name = [manufacturer, product, transport]
-            .compactMap { value in
-                guard let value, !value.isEmpty else { return nil }
-                return value
-            }
-            .joined(separator: " / ")
-        return name.isEmpty ? "未知 HID Mouse" : name
+        return PointerDeviceDescriptor(
+            manufacturer: manufacturer,
+            product: product,
+            transport: transport
+        )
     }
 
     private func stringProperty(_ key: CFString, device: IOHIDDevice) -> String? {
@@ -155,24 +161,38 @@ final class PointerSourceService {
     }
 
     private func emitDebug(_ detail: String) {
-        Self.appendDebugLine(detail)
         DispatchQueue.main.async { [weak self] in
             self?.onDebugEvent?(detail)
         }
     }
 
-    private static func appendDebugLine(_ detail: String) {
-        let line = "\(Date()) \(detail)\n"
-        let url = URL(fileURLWithPath: "/tmp/touchable-pointer-source.log")
-        guard let data = line.data(using: .utf8) else { return }
+    private func emitState() {
+        let state = lock.withLock {
+            (lastDeviceDescription, lastEventDescription, summarizeKnownDevices())
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.onStateChange?(state.0, state.1, state.2)
+        }
+    }
 
-        if FileManager.default.fileExists(atPath: url.path),
-           let handle = try? FileHandle(forWritingTo: url) {
-            defer { try? handle.close() }
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
-        } else {
-            try? data.write(to: url)
+    private func summarizeKnownDevices() -> String {
+        let names = Set(knownDevices.values.map(\.displayName))
+            .sorted()
+
+        guard !names.isEmpty else {
+            return "未识别"
+        }
+        return names.joined(separator: "\n")
+    }
+
+    private func displayName(for kind: PointerDeviceKind) -> String {
+        switch kind {
+        case .trackpad:
+            return "触控板"
+        case .mouse:
+            return "鼠标"
+        case .unknown:
+            return "未知"
         }
     }
 

@@ -54,11 +54,18 @@
 - [x] 本地打包固定签名标识 `com.philrobin.TouchAble`，提升辅助功能权限稳定性。
 - [x] 开发运行固定安装到 `~/Applications/TouchAble.app`，方便 macOS 输入监控和辅助功能授权。
 - [x] 切换为开源项目，补齐公开 README、roadmap、project history 和 MIT License。
+- [x] 增加三指按下快捷键映射。
+- [x] 滚动触感默认关闭。
+- [x] 增加仅触控板触发模式，默认抑制鼠标输入产生的全局触感。
+- [x] 增加 HID 输入来源识别与 Debug 面板状态。
+- [x] 拆分常用设置与高级调试设置。
+- [x] 收口输入来源诊断到 App 内 Debug 事件。
 
 ## 下一阶段：开源打磨
 
 - [ ] 降低普通模式 CPU 消耗。
 - [ ] 继续降低触感延迟，让 UI 变化第一时间可感。
-- [ ] 梳理调试参数，区分普通用户设置和开发者调试设置。
+- [x] 梳理调试参数，区分普通用户设置和开发者调试设置。
 - [ ] 增加版本号、About 和隐私说明界面。
 - [ ] 做正式 release packaging、Developer ID 签名、公证和 DMG。
+- [ ] 按 `docs/compatibility.md` 完成常用 App 兼容性实测。

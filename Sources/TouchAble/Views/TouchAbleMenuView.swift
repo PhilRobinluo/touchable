@@ -19,7 +19,8 @@ struct TouchAbleMenuView: View {
             }
 
             Toggle("边缘触感", isOn: $preferences.edgeHapticsEnabled)
-            Toggle("操作触感", isOn: $preferences.pointerEventHapticsEnabled)
+            Toggle("点击 / 拖拽触感", isOn: $preferences.pointerEventHapticsEnabled)
+            Toggle("滚动触感", isOn: $preferences.scrollHapticsEnabled)
             Toggle("光标触感", isOn: $preferences.cursorHapticsEnabled)
             Toggle("语义触感", isOn: $preferences.semanticHapticsEnabled)
 
@@ -80,7 +81,12 @@ struct TouchAbleMenuView: View {
                 Label("打开调试面板", systemImage: "waveform.path.ecg")
             }
 
-            SettingsLink {
+            Button {
+                SettingsWindowPresenter.shared.show(
+                    preferences: preferences,
+                    controller: controller
+                )
+            } label: {
                 Label("设置", systemImage: "gearshape")
             }
         }

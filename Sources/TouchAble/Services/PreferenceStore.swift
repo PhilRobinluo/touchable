@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import TouchAbleCore
 
@@ -7,6 +8,7 @@ final class PreferenceStore: ObservableObject {
         static let isEnabled = "isEnabled"
         static let edgeHapticsEnabled = "edgeHapticsEnabled"
         static let pointerEventHapticsEnabled = "pointerEventHapticsEnabled"
+        static let scrollHapticsEnabled = "scrollHapticsEnabled"
         static let cursorHapticsEnabled = "cursorHapticsEnabled"
         static let semanticHapticsEnabled = "semanticHapticsEnabled"
         static let strength = "strength"
@@ -16,6 +18,10 @@ final class PreferenceStore: ObservableObject {
         static let pointerPollingHertz = "pointerPollingHertz"
         static let hapticMinimumInterval = "hapticMinimumInterval"
         static let pointerEventDelay = "pointerEventDelay"
+        static let threeFingerShortcutEnabled = "threeFingerShortcutEnabled"
+        static let threeFingerShortcutKeyCode = "threeFingerShortcutKeyCode"
+        static let threeFingerShortcutModifierFlags = "threeFingerShortcutModifierFlags"
+        static let threeFingerShortcutSafetyReset = "threeFingerShortcutSafetyReset"
     }
 
     private let defaults: UserDefaults
@@ -30,6 +36,10 @@ final class PreferenceStore: ObservableObject {
 
     @Published var pointerEventHapticsEnabled: Bool {
         didSet { defaults.set(pointerEventHapticsEnabled, forKey: Key.pointerEventHapticsEnabled) }
+    }
+
+    @Published var scrollHapticsEnabled: Bool {
+        didSet { defaults.set(scrollHapticsEnabled, forKey: Key.scrollHapticsEnabled) }
     }
 
     @Published var cursorHapticsEnabled: Bool {
@@ -68,12 +78,25 @@ final class PreferenceStore: ObservableObject {
         didSet { defaults.set(pointerEventDelay, forKey: Key.pointerEventDelay) }
     }
 
+    @Published var threeFingerShortcutEnabled: Bool {
+        didSet { defaults.set(threeFingerShortcutEnabled, forKey: Key.threeFingerShortcutEnabled) }
+    }
+
+    @Published var threeFingerShortcutKey: KeyboardShortcutKey {
+        didSet { defaults.set(Int(threeFingerShortcutKey.keyCode), forKey: Key.threeFingerShortcutKeyCode) }
+    }
+
+    @Published var threeFingerShortcutModifiers: NSEvent.ModifierFlags {
+        didSet { defaults.set(threeFingerShortcutModifiers.rawValue, forKey: Key.threeFingerShortcutModifierFlags) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
         isEnabled = defaults.object(forKey: Key.isEnabled) as? Bool ?? true
         edgeHapticsEnabled = defaults.object(forKey: Key.edgeHapticsEnabled) as? Bool ?? true
         pointerEventHapticsEnabled = defaults.object(forKey: Key.pointerEventHapticsEnabled) as? Bool ?? true
+        scrollHapticsEnabled = defaults.object(forKey: Key.scrollHapticsEnabled) as? Bool ?? false
         cursorHapticsEnabled = defaults.object(forKey: Key.cursorHapticsEnabled) as? Bool ?? true
         semanticHapticsEnabled = defaults.object(forKey: Key.semanticHapticsEnabled) as? Bool ?? true
 
@@ -91,6 +114,17 @@ final class PreferenceStore: ObservableObject {
         hapticMinimumInterval = max(0.04, min(0.35, savedMinimumInterval))
         let savedPointerEventDelay = defaults.object(forKey: Key.pointerEventDelay) as? Double ?? 0
         pointerEventDelay = max(0, min(0.2, savedPointerEventDelay))
+        if defaults.object(forKey: Key.threeFingerShortcutSafetyReset) as? Bool == true {
+            threeFingerShortcutEnabled = defaults.object(forKey: Key.threeFingerShortcutEnabled) as? Bool ?? false
+        } else {
+            threeFingerShortcutEnabled = false
+            defaults.set(false, forKey: Key.threeFingerShortcutEnabled)
+            defaults.set(true, forKey: Key.threeFingerShortcutSafetyReset)
+        }
+        let savedShortcutKeyCode = defaults.object(forKey: Key.threeFingerShortcutKeyCode) as? Int ?? Int(KeyboardShortcutKey.space.keyCode)
+        threeFingerShortcutKey = KeyboardShortcutKey(keyCode: UInt16(max(0, min(Int(UInt16.max), savedShortcutKeyCode)))) ?? .space
+        let savedShortcutModifierFlags = defaults.object(forKey: Key.threeFingerShortcutModifierFlags) as? UInt ?? NSEvent.ModifierFlags.command.rawValue
+        threeFingerShortcutModifiers = NSEvent.ModifierFlags(rawValue: savedShortcutModifierFlags)
     }
 
     var profile: HapticProfile {
@@ -105,5 +139,12 @@ final class PreferenceStore: ObservableObject {
 
     var pointerPollingInterval: TimeInterval {
         1.0 / max(10, min(80, pointerPollingHertz))
+    }
+
+    var threeFingerShortcut: KeyboardShortcut {
+        KeyboardShortcut(
+            keyCode: threeFingerShortcutKey.keyCode,
+            modifierFlags: threeFingerShortcutModifiers.intersection(.deviceIndependentFlagsMask)
+        )
     }
 }

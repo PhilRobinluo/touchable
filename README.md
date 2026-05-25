@@ -6,7 +6,7 @@ feel more tactile on Force Touch trackpads and Magic Trackpads.
 It listens to pointer position, pointer events, cursor shape, and optionally
 Accessibility UI roles, then maps meaningful changes to short system haptic
 feedback. The goal is not "more vibration"; the goal is a quieter layer of
-touch feedback for edges, buttons, links, text, inputs, dragging, and scrolling.
+touch feedback for edges, buttons, links, text, inputs, and dragging.
 
 ## Status
 
@@ -22,8 +22,9 @@ The repository is open source so the idea can be explored in public.
 - Edge haptics near screen boundaries.
 - Semantic haptics for buttons, links, text, inputs, sliders, and other UI roles
   after Accessibility permission is granted.
-- Pointer-event haptics for clicks, drags, and scrolls after Input Monitoring is
-  granted.
+- Pointer-event haptics for clicks and drags after Input Monitoring is granted.
+- Optional scroll haptics, disabled by default.
+- Configurable three-finger trackpad press shortcut mapping.
 - Cursor-shape haptics for I-beam, pointing hand, drag, resize, and related
   cursor transitions.
 - Playground window for stable in-app demos and tuning.
@@ -38,6 +39,7 @@ TouchAble is designed to use the narrowest data needed for haptic feedback:
 - Pointer position.
 - Pointer event type and location.
 - Cursor shape.
+- Raw trackpad finger count for three-finger shortcut mapping.
 - Accessibility role/subrole/action metadata for the UI element under the
   pointer.
 
@@ -50,7 +52,22 @@ keystrokes. If you spot code that violates this boundary, please open an issue.
 - Swift toolchain from Xcode or Command Line Tools.
 - Optional permissions:
   - Accessibility: enables semantic UI role detection.
-  - Input Monitoring: enables global click, drag, and scroll event haptics.
+  - Input Monitoring: enables global click, drag, scroll, and shortcut mapping
+    events.
+
+## Downloadable Package
+
+Build a release zip locally:
+
+```bash
+./script/package_release.sh
+```
+
+The package is written to `dist/release/TouchAble-<version>-macos.zip`. It
+contains `TouchAble.app`, signed with the local `TouchAble Local Dev` identity
+when available, or ad-hoc signed as a fallback. It is not notarized by Apple, so
+first launch on another Mac may require opening it from Finder with
+Control-click > Open or allowing it in System Settings.
 
 ## Build And Run
 
@@ -102,7 +119,9 @@ For local development, you can create a stable self-signed code-signing identity
 
 ## Development Principles
 
-- Use Apple public APIs.
+- Prefer Apple public APIs. The three-finger global shortcut mapping uses
+  Apple's private `MultitouchSupport.framework` because macOS public APIs do not
+  expose reliable global trackpad finger counts.
 - Keep feedback short and throttled.
 - Prefer "changed meaning" over constant vibration.
 - Make all experimental tuning reversible.

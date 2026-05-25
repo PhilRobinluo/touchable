@@ -59,6 +59,7 @@ struct DebugView: View {
             DebugMetricCard(title: "输入监控", value: controller.inputMonitoringTrusted ? "已授权" : "未授权", icon: controller.inputMonitoringTrusted ? "checkmark.circle.fill" : "exclamationmark.circle")
             DebugMetricCard(title: "鼠标位置", value: controller.pointerDescription, icon: "cursorarrow.motionlines")
             DebugMetricCard(title: "最近操作", value: controller.pointerEventDescription, icon: "computermouse")
+            DebugMetricCard(title: "三指快捷键", value: controller.threeFingerShortcutDescription, icon: "hand.tap")
             DebugMetricCard(title: "当前光标", value: controller.cursorDescription, icon: "cursorarrow.click.2")
             DebugMetricCard(title: "当前 AX Role", value: controller.semanticRole, icon: "viewfinder")
             DebugMetricCard(title: "候选触觉", value: controller.candidateDescription, icon: "target")
@@ -146,8 +147,10 @@ struct DebugView: View {
                     .frame(width: 52, alignment: .trailing)
             }
 
-            Toggle("启用点击 / 拖拽 / 滚动触感", isOn: $preferences.pointerEventHapticsEnabled)
+            Toggle("启用点击 / 拖拽触感", isOn: $preferences.pointerEventHapticsEnabled)
+            Toggle("启用滚动触感", isOn: $preferences.scrollHapticsEnabled)
             Toggle("启用光标形状触感", isOn: $preferences.cursorHapticsEnabled)
+            Toggle("启用三指按下快捷键", isOn: $preferences.threeFingerShortcutEnabled)
 
             if !controller.inputMonitoringTrusted {
                 Button {

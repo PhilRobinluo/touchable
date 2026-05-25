@@ -13,6 +13,7 @@ final class TouchAbleController: ObservableObject {
     @Published private(set) var cursorDescription = "未读取"
     @Published private(set) var semanticRole = "未探测"
     @Published private(set) var pointerEventDescription = "未收到"
+    @Published private(set) var threeFingerShortcutDescription = "未启用"
     @Published private(set) var candidateDescription = "等待"
     @Published private(set) var lastDecision = "等待"
     @Published private(set) var lastPulseDescription = "尚未触发"
@@ -25,6 +26,8 @@ final class TouchAbleController: ObservableObject {
     private let inputMonitoring = InputMonitoringPermissionService()
     private let haptics = HapticFeedbackService()
     private let pointerEventTap = PointerEventTapService()
+    private let threeFingerPress = ThreeFingerPressService()
+    private let shortcutSender = KeyboardShortcutSender()
     private let cursorProbe = CursorProbeService()
     private let semanticProbe = SemanticProbeService()
     private let throttler = HapticThrottler()
@@ -35,6 +38,7 @@ final class TouchAbleController: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     private var tickCount = 0
     private var pointerEventCounter = 0
+    private var lastTickPointerLocation: CGPoint?
     private var lastSemanticProbeLocation: CGPoint?
     private var lastSemanticProbeResult: SemanticProbeResult?
     private var lastSemanticProbeDate: Date = .distantPast
@@ -44,6 +48,7 @@ final class TouchAbleController: ObservableObject {
         accessibilityTrusted = accessibility.isTrusted
         inputMonitoringTrusted = inputMonitoring.isTrusted
         configurePointerEvents()
+        configureThreeFingerPressIfNeeded()
         observeTimingPreferences()
         start()
     }
@@ -51,6 +56,7 @@ final class TouchAbleController: ObservableObject {
     deinit {
         timer?.invalidate()
         pointerEventTap.stop()
+        threeFingerPress.stop()
     }
 
     func start() {
@@ -85,6 +91,20 @@ final class TouchAbleController: ObservableObject {
             .dropFirst()
             .sink { [weak self] _ in
                 self?.restartTimer()
+            }
+            .store(in: &cancellables)
+
+        preferences.$threeFingerShortcutEnabled
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] isEnabled in
+                if isEnabled {
+                    self?.configureThreeFingerPressIfNeeded()
+                } else {
+                    self?.threeFingerPress.stop()
+                    self?.record(title: "三指快捷键监听已关闭", detail: "不再监听三指触摸事件", zone: nil)
+                }
+                self?.updateThreeFingerShortcutDescription()
             }
             .store(in: &cancellables)
     }
@@ -126,6 +146,21 @@ final class TouchAbleController: ObservableObject {
         recordPulse(zone: zone, detail: "手动测试触觉")
     }
 
+    func testThreeFingerShortcut() {
+        let shortcut = preferences.threeFingerShortcut
+        guard shortcut.isValid else {
+            record(title: "测试快捷键失败", detail: "三指快捷键未设置按键", zone: nil)
+            return
+        }
+
+        shortcutSender.send(shortcut)
+        record(title: "测试快捷键", detail: "手动发送 \(shortcut.displayName)", zone: .control)
+    }
+
+    func simulateThreeFingerPressForDebug() {
+        threeFingerPress.simulateThreeFingerPressForDebug(location: NSEvent.mouseLocation)
+    }
+
     private func configurePointerEvents() {
         pointerEventTap.onEvent = { [weak self] kind, location in
             self?.handlePointerEvent(kind, location: location)
@@ -140,14 +175,37 @@ final class TouchAbleController: ObservableObject {
         )
     }
 
+    private func configureThreeFingerPressIfNeeded() {
+        guard preferences.threeFingerShortcutEnabled else {
+            threeFingerPress.stop()
+            updateThreeFingerShortcutDescription()
+            return
+        }
+
+        threeFingerPress.onPress = { [weak self] event in
+            self?.handleThreeFingerPress(event)
+        }
+        threeFingerPress.onDebugEvent = { [weak self] detail in
+            self?.record(title: "三指事件探针", detail: detail, zone: nil)
+        }
+        threeFingerPress.start()
+        updateThreeFingerShortcutDescription()
+        record(title: "三指快捷键监听已启动", detail: "监听三指同时按下手势", zone: nil)
+    }
+
     private func handlePointerEvent(_ kind: PointerEventKind, location: CGPoint) {
         pointerEventDescription = "\(kind.displayName) · x \(Int(location.x)), y \(Int(location.y))"
 
         guard preferences.isEnabled,
-              preferences.pointerEventHapticsEnabled,
               let zone = kind.zone
         else {
             return
+        }
+
+        if kind == .scrolled {
+            guard preferences.scrollHapticsEnabled else { return }
+        } else {
+            guard preferences.pointerEventHapticsEnabled else { return }
         }
 
         let profile = preferences.profile
@@ -174,6 +232,27 @@ final class TouchAbleController: ObservableObject {
         }
     }
 
+    private func handleThreeFingerPress(_ event: ThreeFingerPressEvent) {
+        updateThreeFingerShortcutDescription()
+
+        guard preferences.isEnabled,
+              preferences.threeFingerShortcutEnabled
+        else {
+            return
+        }
+
+        let shortcut = preferences.threeFingerShortcut
+        guard shortcut.isValid else {
+            record(title: "三指按下", detail: "未设置快捷键", zone: nil)
+            return
+        }
+
+        shortcutSender.send(shortcut)
+        let detail = "\(event.touchCount) 指 · x \(Int(event.location.x)), y \(Int(event.location.y)) · 发送 \(shortcut.displayName)"
+        threeFingerShortcutDescription = shortcut.displayName
+        record(title: "三指快捷键", detail: detail, zone: .control)
+    }
+
     func clearDebugEvents() {
         debugEvents.removeAll()
         record(title: "清空日志", detail: "调试事件已重置", zone: nil)
@@ -190,20 +269,30 @@ final class TouchAbleController: ObservableObject {
             }
         }
 
-        updatePointerDescription()
+        let pointerLocation = NSEvent.mouseLocation
+        updatePointerDescription(location: pointerLocation)
 
         guard preferences.isEnabled else {
             throttler.reset()
             lastZone = .quiet
             setText(\.candidateDescription, "总开关关闭")
             setText(\.lastDecision, "未运行")
+            lastTickPointerLocation = pointerLocation
             return
         }
 
         let profile = preferences.profile
         updateProfileDescription(profile)
         updateCursorDescription(profile: profile)
+
+        guard pointerMovedEnough(pointerLocation) else {
+            setText(\.candidateDescription, "光标静止")
+            setText(\.lastDecision, "静止不触发")
+            return
+        }
+
         let signal = currentSignal(profile: profile)
+        lastTickPointerLocation = pointerLocation
 
         guard let signal else {
             throttler.reset()
@@ -281,12 +370,21 @@ final class TouchAbleController: ObservableObject {
         }
     }
 
-    private func updatePointerDescription() {
-        let point = NSEvent.mouseLocation
-        let nextDescription = "x \(Int(point.x)), y \(Int(point.y))"
+    private func updatePointerDescription(location: CGPoint) {
+        let nextDescription = "x \(Int(location.x)), y \(Int(location.y))"
         if pointerDescription != nextDescription {
             pointerDescription = nextDescription
         }
+    }
+
+    private func pointerMovedEnough(_ location: CGPoint) -> Bool {
+        guard let lastTickPointerLocation else {
+            lastTickPointerLocation = location
+            return false
+        }
+
+        return abs(lastTickPointerLocation.x - location.x) >= 2 ||
+            abs(lastTickPointerLocation.y - location.y) >= 2
     }
 
     private func updateCursorDescription(profile: HapticProfile) {
@@ -322,6 +420,14 @@ final class TouchAbleController: ObservableObject {
         let nextDescription = "强度 \(profile.intensityLevel) · \(profile.pulseCount) 次脉冲 · \(modeText) · 节流 \(String(format: "%.2fs", profile.minimumInterval)) · 轮询 \(Int(preferences.pointerPollingHertz.rounded()))Hz · 操作延时 \(String(format: "%.2fs", preferences.pointerEventDelay)) · 重触发 \(repeatText)"
         if profileDescription != nextDescription {
             profileDescription = nextDescription
+        }
+        updateThreeFingerShortcutDescription()
+    }
+
+    private func updateThreeFingerShortcutDescription() {
+        let nextDescription = preferences.threeFingerShortcutEnabled ? preferences.threeFingerShortcut.displayName : "未启用"
+        if threeFingerShortcutDescription != nextDescription {
+            threeFingerShortcutDescription = nextDescription
         }
     }
 

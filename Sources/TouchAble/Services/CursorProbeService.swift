@@ -8,7 +8,6 @@ final class CursorProbeService {
         let match = classify(cursor)
 
         guard let match else {
-            let identity = "cursor:custom:\(ObjectIdentifier(cursor).hashValue)"
             let zone = HapticZone.control
             guard profile.enabledZones.contains(zone) else {
                 return CursorProbeResult(
@@ -22,7 +21,7 @@ final class CursorProbeService {
             return CursorProbeResult(
                 name: "custom",
                 zone: zone,
-                signal: HapticSignal(zone: zone, identity: identity),
+                signal: HapticSignal(zone: zone, identity: "cursor:custom"),
                 reason: "自定义光标变化"
             )
         }

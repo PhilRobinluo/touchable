@@ -21,6 +21,21 @@ struct TouchAbleApp: App {
                 )
             }
         }
+
+        if ProcessInfo.processInfo.arguments.contains("--open-settings") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                SettingsWindowPresenter.shared.show(
+                    preferences: preferenceStore,
+                    controller: touchAbleController
+                )
+            }
+        }
+
+        if ProcessInfo.processInfo.arguments.contains("--simulate-three-finger-press") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                touchAbleController.simulateThreeFingerPressForDebug()
+            }
+        }
     }
 
     var body: some Scene {

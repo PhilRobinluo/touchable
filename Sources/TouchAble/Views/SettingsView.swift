@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import TouchAbleCore
 
@@ -18,10 +19,15 @@ struct SettingsView: View {
                     .onChange(of: preferences.edgeHapticsEnabled) { _, _ in
                         pulse(.control, "settings-edge-change")
                     }
-                Toggle("操作触感", isOn: $preferences.pointerEventHapticsEnabled)
+                Toggle("点击 / 拖拽触感", isOn: $preferences.pointerEventHapticsEnabled)
                     .localPulse(zone: .control, identity: "settings-pointer-event")
                     .onChange(of: preferences.pointerEventHapticsEnabled) { _, _ in
                         pulse(.control, "settings-pointer-event-change")
+                    }
+                Toggle("滚动触感", isOn: $preferences.scrollHapticsEnabled)
+                    .localPulse(zone: .control, identity: "settings-scroll")
+                    .onChange(of: preferences.scrollHapticsEnabled) { _, _ in
+                        pulse(.control, "settings-scroll-change")
                     }
                 Toggle("光标触感", isOn: $preferences.cursorHapticsEnabled)
                     .localPulse(zone: .control, identity: "settings-cursor")
@@ -33,6 +39,48 @@ struct SettingsView: View {
                     .onChange(of: preferences.semanticHapticsEnabled) { _, _ in
                         pulse(.control, "settings-semantic-change")
                     }
+                Toggle("三指按下快捷键", isOn: $preferences.threeFingerShortcutEnabled)
+                    .localPulse(zone: .control, identity: "settings-three-finger-shortcut")
+                    .onChange(of: preferences.threeFingerShortcutEnabled) { _, _ in
+                        pulse(.control, "settings-three-finger-shortcut-change")
+                    }
+            }
+
+            Section("三指快捷键") {
+                Picker("按键", selection: $preferences.threeFingerShortcutKey) {
+                    ForEach(KeyboardShortcutKey.allCases) { key in
+                        Text(key.displayName).tag(key)
+                    }
+                }
+                .localPulse(zone: .control, identity: "settings-three-finger-key")
+
+                HStack {
+                    Toggle("⌘", isOn: modifierBinding(.command))
+                    Toggle("⌥", isOn: modifierBinding(.option))
+                    Toggle("⌃", isOn: modifierBinding(.control))
+                    Toggle("⇧", isOn: modifierBinding(.shift))
+                }
+                .toggleStyle(.button)
+
+                HStack {
+                    Text("当前映射")
+                    Spacer()
+                    Text(preferences.threeFingerShortcut.displayName)
+                        .font(.body.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+
+                Button {
+                    pulse(.control, "settings-three-finger-test-shortcut")
+                    controller.testThreeFingerShortcut()
+                } label: {
+                    Label("测试发送当前快捷键", systemImage: "keyboard")
+                }
+                .disabled(!preferences.threeFingerShortcut.isValid)
+
+                Text("开启后，触摸板三根手指同时落下会发送上面的快捷键。这个功能需要系统把三指触摸事件交给 App；如果某个三指手势已被系统占用，可能需要先在系统设置里避开冲突。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("手感") {
@@ -169,7 +217,7 @@ struct SettingsView: View {
                     .localPulse(zone: .control, identity: "settings-input-monitoring-button")
                 }
 
-                Text("操作触感需要监听全局点击、拖拽和滚动事件。TouchAble 只使用事件类型和位置，不记录输入内容。")
+                Text("点击 / 拖拽触感需要监听全局鼠标事件；滚动触感有单独开关，默认关闭。TouchAble 只使用事件类型和位置，不记录输入内容。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -181,5 +229,18 @@ struct SettingsView: View {
 
     private func pulse(_ zone: HapticZone, _ identity: String) {
         controller.pulseForLocalSurface(zone: zone, identity: identity)
+    }
+
+    private func modifierBinding(_ flag: NSEvent.ModifierFlags) -> Binding<Bool> {
+        Binding {
+            preferences.threeFingerShortcutModifiers.contains(flag)
+        } set: { isOn in
+            if isOn {
+                preferences.threeFingerShortcutModifiers.insert(flag)
+            } else {
+                preferences.threeFingerShortcutModifiers.remove(flag)
+            }
+            pulse(.control, "settings-three-finger-modifier")
+        }
     }
 }

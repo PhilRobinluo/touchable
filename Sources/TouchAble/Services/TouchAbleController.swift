@@ -47,16 +47,20 @@ final class TouchAbleController: ObservableObject {
     private var lastSemanticProbeLocation: CGPoint?
     private var lastSemanticProbeResult: SemanticProbeResult?
     private var lastSemanticProbeDate: Date = .distantPast
+    private var diagnosticsEnabled = false
+    private var activePollingUntil: Date = .distantPast
+    private let trackpadActivePollingGrace: TimeInterval = 1.0
 
     init(preferences: PreferenceStore) {
         self.preferences = preferences
         accessibilityTrusted = accessibility.isTrusted
         inputMonitoringTrusted = inputMonitoring.isTrusted
-        configurePointerEvents()
-        configurePointerSourceMonitoring()
-        configureTrackpadInputMonitoring()
         observeTimingPreferences()
-        start()
+        if preferences.isEnabled {
+            start()
+        } else {
+            publishStoppedState()
+        }
     }
 
     deinit {
@@ -67,8 +71,50 @@ final class TouchAbleController: ObservableObject {
     }
 
     func start() {
-        guard timer == nil else { return }
+        guard !isRunning else { return }
 
+        configureTrackpadInputMonitoring()
+        isRunning = true
+        if preferences.trackpadOnlyHapticsEnabled {
+            stopActivePolling(reason: "等待触控板")
+        } else {
+            startActivePolling(reason: "不限输入")
+        }
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+        pointerEventTap.stop()
+        pointerSource.stop()
+        threeFingerPress.stop()
+        throttler.reset()
+        eventThrottler.reset()
+        lastTickPointerLocation = nil
+        lastSemanticProbeLocation = nil
+        lastSemanticProbeResult = nil
+        lastSemanticProbeDate = .distantPast
+        activePollingUntil = .distantPast
+        if isRunning {
+            isRunning = false
+        }
+        publishStoppedState()
+    }
+
+    func setDiagnosticsEnabled(_ enabled: Bool) {
+        diagnosticsEnabled = enabled
+        if enabled {
+            refreshAccessibilityStatus()
+            refreshInputMonitoringStatus()
+            updateThreeFingerShortcutDescription()
+            if !isRunning {
+                publishStoppedState()
+            }
+        }
+    }
+
+    private func startTimer() {
+        guard timer == nil else { return }
         let timer = Timer(timeInterval: preferences.pointerPollingInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.tick()
@@ -77,14 +123,13 @@ final class TouchAbleController: ObservableObject {
 
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
-        isRunning = true
     }
 
     private func restartTimer() {
+        guard isRunning, timer != nil else { return }
         timer?.invalidate()
         timer = nil
-        isRunning = false
-        start()
+        startTimer()
         record(
             title: "刷新轮询",
             detail: "光标轮询 \(Int(preferences.pointerPollingHertz.rounded()))Hz",
@@ -101,17 +146,45 @@ final class TouchAbleController: ObservableObject {
             }
             .store(in: &cancellables)
 
+        preferences.$isEnabled
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] isEnabled in
+                if isEnabled {
+                    self?.start()
+                } else {
+                    self?.stop()
+                }
+            }
+            .store(in: &cancellables)
+
         preferences.$threeFingerShortcutEnabled
             .removeDuplicates()
             .dropFirst()
             .sink { [weak self] isEnabled in
-                self?.configureTrackpadInputMonitoring()
-                self?.record(
+                guard let self else { return }
+                if self.isRunning {
+                    self.configureTrackpadInputMonitoring()
+                }
+                self.record(
                     title: isEnabled ? "三指快捷键已开启" : "三指快捷键已关闭",
                     detail: isEnabled ? "三指按下会发送映射快捷键" : "仍保留触控板输入识别，用于过滤鼠标触发",
                     zone: nil
                 )
-                self?.updateThreeFingerShortcutDescription()
+                self.updateThreeFingerShortcutDescription()
+            }
+            .store(in: &cancellables)
+
+        preferences.$trackpadOnlyHapticsEnabled
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] isTrackpadOnly in
+                guard let self, self.isRunning else { return }
+                if isTrackpadOnly {
+                    self.stopActivePolling(reason: "等待触控板")
+                } else {
+                    self.startActivePolling(reason: "不限输入")
+                }
             }
             .store(in: &cancellables)
     }
@@ -187,9 +260,9 @@ final class TouchAbleController: ObservableObject {
             self?.record(title: "输入来源探针", detail: detail, zone: nil)
         }
         pointerSource.onStateChange = { [weak self] device, event, devices in
-            self?.setText(\.inputDeviceDescription, device)
-            self?.setText(\.inputSourceEventDescription, event)
-            self?.setText(\.knownPointerDevicesDescription, devices)
+            self?.publishDiagnosticText(\.inputDeviceDescription, device)
+            self?.publishDiagnosticText(\.inputSourceEventDescription, event)
+            self?.publishDiagnosticText(\.knownPointerDevicesDescription, devices)
         }
 
         let started = pointerSource.start()
@@ -207,13 +280,53 @@ final class TouchAbleController: ObservableObject {
         threeFingerPress.onDebugEvent = { [weak self] detail in
             self?.record(title: "三指事件探针", detail: detail, zone: nil)
         }
+        threeFingerPress.onTrackpadActivity = { [weak self] in
+            self?.handleTrackpadActivity()
+        }
         threeFingerPress.start()
         updateThreeFingerShortcutDescription()
         record(title: "触控板输入监听已启动", detail: "用于三指快捷键和仅触控板触发过滤", zone: nil)
     }
 
+    private func handleTrackpadActivity(now: Date = Date()) {
+        guard preferences.isEnabled, preferences.trackpadOnlyHapticsEnabled else { return }
+        activePollingUntil = now.addingTimeInterval(trackpadActivePollingGrace)
+        if timer == nil {
+            startActivePolling(reason: "触控板活动")
+        }
+    }
+
+    private func startActivePolling(reason: String) {
+        guard preferences.isEnabled else { return }
+        configurePointerEvents()
+        configurePointerSourceMonitoring()
+        if preferences.trackpadOnlyHapticsEnabled {
+            activePollingUntil = Date().addingTimeInterval(trackpadActivePollingGrace)
+        }
+        startTimer()
+        publishDiagnosticText(\.candidateDescription, reason)
+        publishDiagnosticText(\.lastDecision, "等待输入")
+    }
+
+    private func stopActivePolling(reason: String) {
+        timer?.invalidate()
+        timer = nil
+        pointerEventTap.stop()
+        pointerSource.stop()
+        throttler.reset()
+        eventThrottler.reset()
+        lastTickPointerLocation = nil
+        lastSemanticProbeLocation = nil
+        lastSemanticProbeResult = nil
+        lastSemanticProbeDate = .distantPast
+        publishDiagnosticZone(.quiet)
+        publishDiagnosticText(\.candidateDescription, reason)
+        publishDiagnosticText(\.lastDecision, "主轮询休眠")
+        publishDiagnosticText(\.inputSourceDescription, preferences.trackpadOnlyHapticsEnabled ? "等待触控板" : "不限制")
+    }
+
     private func handlePointerEvent(_ kind: PointerEventKind, location: CGPoint) {
-        pointerEventDescription = "\(kind.displayName) · x \(Int(location.x)), y \(Int(location.y))"
+        publishDiagnosticText(\.pointerEventDescription, "\(kind.displayName) · x \(Int(location.x)), y \(Int(location.y))")
 
         guard preferences.isEnabled,
               let zone = kind.zone
@@ -270,7 +383,7 @@ final class TouchAbleController: ObservableObject {
 
         shortcutSender.send(shortcut)
         let detail = "\(event.touchCount) 指 · x \(Int(event.location.x)), y \(Int(event.location.y)) · 发送 \(shortcut.displayName)"
-        threeFingerShortcutDescription = shortcut.displayName
+        publishDiagnosticText(\.threeFingerShortcutDescription, shortcut.displayName)
         record(title: "三指快捷键", detail: detail, zone: .control)
     }
 
@@ -281,6 +394,14 @@ final class TouchAbleController: ObservableObject {
 
     private func tick() {
         tickCount += 1
+        let now = Date()
+        if preferences.trackpadOnlyHapticsEnabled,
+           now > activePollingUntil,
+           !threeFingerPress.hasRecentTrackpadActivity(now: now, within: 0.2) {
+            stopActivePolling(reason: "触控板静止")
+            return
+        }
+
         let permissionRefreshTicks = max(10, Int(preferences.pointerPollingHertz.rounded()))
         if tickCount % permissionRefreshTicks == 0 {
             refreshAccessibilityStatus()
@@ -295,9 +416,9 @@ final class TouchAbleController: ObservableObject {
 
         guard preferences.isEnabled else {
             throttler.reset()
-            lastZone = .quiet
-            setText(\.candidateDescription, "总开关关闭")
-            setText(\.lastDecision, "未运行")
+            publishDiagnosticZone(.quiet)
+            publishDiagnosticText(\.candidateDescription, "总开关关闭")
+            publishDiagnosticText(\.lastDecision, "未运行")
             lastTickPointerLocation = pointerLocation
             return
         }
@@ -307,14 +428,14 @@ final class TouchAbleController: ObservableObject {
         updateCursorDescription(profile: profile)
 
         guard pointerMovedEnough(pointerLocation) else {
-            setText(\.candidateDescription, "光标静止")
-            setText(\.lastDecision, "静止不触发")
+            publishDiagnosticText(\.candidateDescription, "光标静止")
+            publishDiagnosticText(\.lastDecision, "静止不触发")
             return
         }
 
         guard allowsGlobalHapticTrigger(context: "光标移动") else {
             throttler.reset()
-            lastZone = .quiet
+            publishDiagnosticZone(.quiet)
             lastTickPointerLocation = pointerLocation
             return
         }
@@ -324,17 +445,17 @@ final class TouchAbleController: ObservableObject {
 
         guard let signal else {
             throttler.reset()
-            lastZone = .quiet
+            publishDiagnosticZone(.quiet)
             return
         }
 
         let decision = throttler.decision(for: signal, profile: profile)
-        setText(\.lastDecision, decision.displayReason)
+        publishDiagnosticText(\.lastDecision, decision.displayReason)
         guard decision == .allowed else { return }
         guard throttler.shouldPulse(signal: signal, profile: profile) else { return }
 
         haptics.perform(zone: signal.zone, profile: profile)
-        lastZone = signal.zone
+        publishDiagnosticZone(signal.zone)
         recordPulse(zone: signal.zone, detail: signal.identity)
     }
 
@@ -345,25 +466,25 @@ final class TouchAbleController: ObservableObject {
             in: NSScreen.screens.map(\.frame),
             profile: profile
            ) {
-            setText(\.semanticRole, "未探测")
-            setText(\.candidateDescription, "边缘命中: \(edgeSignal.identity)")
-            setText(\.lastDecision, "等待节流判断")
+            publishDiagnosticText(\.semanticRole, "未探测")
+            publishDiagnosticText(\.candidateDescription, "边缘命中: \(edgeSignal.identity)")
+            publishDiagnosticText(\.lastDecision, "等待节流判断")
             return edgeSignal
         }
 
         guard preferences.semanticHapticsEnabled,
               accessibilityTrusted
         else {
-            setText(\.semanticRole, accessibilityTrusted ? "语义开关关闭" : "未授权")
+            publishDiagnosticText(\.semanticRole, accessibilityTrusted ? "语义开关关闭" : "未授权")
             return currentCursorSignalOrNil(profile: profile, fallbackReason: accessibilityTrusted ? "语义触感关闭" : "需要辅助功能权限")
         }
 
         let result = cachedSemanticResult(profile: profile)
-        setText(\.semanticRole, result.role)
+        publishDiagnosticText(\.semanticRole, result.role)
 
         if let signal = result.signal {
-            setText(\.candidateDescription, result.reason)
-            setText(\.lastDecision, "等待节流判断")
+            publishDiagnosticText(\.candidateDescription, result.reason)
+            publishDiagnosticText(\.lastDecision, "等待节流判断")
             return signal
         }
 
@@ -399,6 +520,7 @@ final class TouchAbleController: ObservableObject {
     }
 
     private func updatePointerDescription(location: CGPoint) {
+        guard diagnosticsEnabled else { return }
         let nextDescription = "x \(Int(location.x)), y \(Int(location.y))"
         if pointerDescription != nextDescription {
             pointerDescription = nextDescription
@@ -416,6 +538,7 @@ final class TouchAbleController: ObservableObject {
     }
 
     private func updateCursorDescription(profile: HapticProfile) {
+        guard diagnosticsEnabled else { return }
         let nextDescription = cursorProbe.currentResult(profile: profile).name
         if cursorDescription != nextDescription {
             cursorDescription = nextDescription
@@ -424,42 +547,42 @@ final class TouchAbleController: ObservableObject {
 
     private func currentCursorSignalOrNil(profile: HapticProfile, fallbackReason: String) -> HapticSignal? {
         guard preferences.cursorHapticsEnabled else {
-            setText(\.candidateDescription, fallbackReason)
-            setText(\.lastDecision, "光标触感关闭")
+            publishDiagnosticText(\.candidateDescription, fallbackReason)
+            publishDiagnosticText(\.lastDecision, "光标触感关闭")
             return nil
         }
 
         let result = cursorProbe.currentResult(profile: profile)
 
         guard let signal = result.signal else {
-            setText(\.candidateDescription, "\(fallbackReason)；光标 \(result.reason)")
-            setText(\.lastDecision, "无候选触觉")
+            publishDiagnosticText(\.candidateDescription, "\(fallbackReason)；光标 \(result.reason)")
+            publishDiagnosticText(\.lastDecision, "无候选触觉")
             return nil
         }
 
-        setText(\.candidateDescription, result.reason)
-        setText(\.lastDecision, "等待节流判断")
+        publishDiagnosticText(\.candidateDescription, result.reason)
+        publishDiagnosticText(\.lastDecision, "等待节流判断")
         return signal
     }
 
     private func allowsGlobalHapticTrigger(context: String) -> Bool {
         guard preferences.trackpadOnlyHapticsEnabled else {
-            setText(\.inputSourceDescription, "不限制")
+            publishDiagnosticText(\.inputSourceDescription, "不限制")
             return true
         }
 
         if pointerSource.hasRecentExternalMouseActivity() {
-            setText(\.inputSourceDescription, "鼠标")
-            setText(\.candidateDescription, "仅触控板触发")
-            setText(\.lastDecision, "\(context) 来自鼠标，跳过")
+            publishDiagnosticText(\.inputSourceDescription, "鼠标")
+            publishDiagnosticText(\.candidateDescription, "仅触控板触发")
+            publishDiagnosticText(\.lastDecision, "\(context) 来自鼠标，跳过")
             return false
         }
 
         let hasRecentTrackpadActivity = threeFingerPress.hasRecentTrackpadActivity()
-        setText(\.inputSourceDescription, hasRecentTrackpadActivity ? "触控板" : "鼠标 / 未知")
+        publishDiagnosticText(\.inputSourceDescription, hasRecentTrackpadActivity ? "触控板" : "鼠标 / 未知")
         guard hasRecentTrackpadActivity else {
-            setText(\.candidateDescription, "仅触控板触发")
-            setText(\.lastDecision, "\(context) 来自鼠标 / 未知，跳过")
+            publishDiagnosticText(\.candidateDescription, "仅触控板触发")
+            publishDiagnosticText(\.lastDecision, "\(context) 来自鼠标 / 未知，跳过")
             return false
         }
 
@@ -467,6 +590,10 @@ final class TouchAbleController: ObservableObject {
     }
 
     private func updateProfileDescription(_ profile: HapticProfile) {
+        guard diagnosticsEnabled else {
+            updateThreeFingerShortcutDescription()
+            return
+        }
         let repeatText = profile.sameIdentityRepeatInterval.map { String(format: "%.2fs", $0) } ?? "关闭"
         let modeText = profile.intensityLevel >= 6 ? "增强混合" : "标准"
         let inputMode = preferences.trackpadOnlyHapticsEnabled ? "仅触控板" : "不限输入"
@@ -508,14 +635,37 @@ final class TouchAbleController: ObservableObject {
         }
     }
 
-    private func recordPulse(zone: HapticZone, detail: String) {
-        pulseCount += 1
+    private func publishDiagnosticText(_ keyPath: ReferenceWritableKeyPath<TouchAbleController, String>, _ value: String) {
+        guard diagnosticsEnabled else { return }
+        setText(keyPath, value)
+    }
+
+    private func publishDiagnosticZone(_ zone: HapticZone) {
+        guard diagnosticsEnabled, lastZone != zone else { return }
         lastZone = zone
-        lastPulseDescription = "\(zone.displayName) · \(Date.now.formatted(date: .omitted, time: .standard))"
+    }
+
+    private func publishStoppedState() {
+        publishDiagnosticZone(.quiet)
+        publishDiagnosticText(\.candidateDescription, "总开关关闭")
+        publishDiagnosticText(\.lastDecision, "未运行")
+        publishDiagnosticText(\.inputSourceDescription, "未监听")
+        publishDiagnosticText(\.pointerDescription, "未读取")
+        publishDiagnosticText(\.cursorDescription, "未读取")
+        publishDiagnosticText(\.semanticRole, "未探测")
+    }
+
+    private func recordPulse(zone: HapticZone, detail: String) {
+        if diagnosticsEnabled {
+            pulseCount += 1
+            lastZone = zone
+            lastPulseDescription = "\(zone.displayName) · \(Date.now.formatted(date: .omitted, time: .standard))"
+        }
         record(title: "触发 \(zone.displayName)", detail: detail, zone: zone)
     }
 
     private func record(title: String, detail: String, zone: HapticZone?) {
+        guard diagnosticsEnabled else { return }
         debugEvents.insert(DebugEvent(title: title, detail: detail, zone: zone), at: 0)
         if debugEvents.count > 80 {
             debugEvents.removeLast(debugEvents.count - 80)

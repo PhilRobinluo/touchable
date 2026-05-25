@@ -2,14 +2,18 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class DebugWindowPresenter {
+final class DebugWindowPresenter: NSObject, NSWindowDelegate {
     static let shared = DebugWindowPresenter()
 
     private var window: NSWindow?
+    private weak var controller: TouchAbleController?
 
-    private init() {}
+    private override init() {}
 
     func show(preferences: PreferenceStore, controller: TouchAbleController) {
+        self.controller = controller
+        controller.setDiagnosticsEnabled(true)
+
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -32,9 +36,14 @@ final class DebugWindowPresenter {
         window.contentViewController = hostingController
         window.center()
         window.isReleasedWhenClosed = false
+        window.delegate = self
         self.window = window
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        controller?.setDiagnosticsEnabled(false)
     }
 }

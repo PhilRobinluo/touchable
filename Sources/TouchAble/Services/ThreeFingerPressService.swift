@@ -13,6 +13,7 @@ struct ThreeFingerPressEvent {
 final class ThreeFingerPressService {
     var onPress: ((ThreeFingerPressEvent) -> Void)?
     var onDebugEvent: ((String) -> Void)?
+    var onTrackpadActivity: (() -> Void)?
 
     private static weak var activeService: ThreeFingerPressService?
     private static let logger = Logger(subsystem: "com.philrobin.TouchAble", category: "ThreeFingerPress")
@@ -26,6 +27,7 @@ final class ThreeFingerPressService {
     private var pressureMonitor: Any?
     private var lastTouchDebugDate: Date = .distantPast
     private var lastTouchDebugCount = -1
+    private var lastTrackpadActivityCallbackDate: Date = .distantPast
 
     deinit {
         stop()
@@ -132,12 +134,17 @@ final class ThreeFingerPressService {
     }
 
     private func handleTouchFrame(fingerCount: Int, timestamp: Double, frame: Int32, contacts: [MTContact]) {
-        lock.withLock {
+        let now = Date()
+        let didTrackpadMove = lock.withLock {
             recognizer.updateTouchCount(fingerCount)
             let activeSamples = contacts
                 .filter(\.isActiveContact)
                 .map(\.trackpadSample)
-            activityTracker.update(contacts: activeSamples)
+            return activityTracker.update(contacts: activeSamples, now: now)
+        }
+
+        if didTrackpadMove {
+            emitTrackpadActivity(now: now)
         }
 
         if let rawPressure = rawForcePressure(from: contacts) {
@@ -146,6 +153,21 @@ final class ThreeFingerPressService {
 
         if fingerCount > 0 {
             emitTouchDebug(fingerCount: fingerCount, timestamp: timestamp, frame: frame, contacts: contacts)
+        }
+    }
+
+    private func emitTrackpadActivity(now: Date) {
+        let shouldEmit = lock.withLock {
+            guard now.timeIntervalSince(lastTrackpadActivityCallbackDate) >= 0.08 else {
+                return false
+            }
+            lastTrackpadActivityCallbackDate = now
+            return true
+        }
+
+        guard shouldEmit else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.onTrackpadActivity?()
         }
     }
 

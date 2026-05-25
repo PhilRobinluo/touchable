@@ -28,10 +28,11 @@ public final class TrackpadActivityTracker {
         self.minimumVelocity = minimumVelocity
     }
 
-    public func update(contacts: [TrackpadContactSample], now: Date = Date()) {
+    @discardableResult
+    public func update(contacts: [TrackpadContactSample], now: Date = Date()) -> Bool {
         guard !contacts.isEmpty else {
             previousContactsByIdentifier.removeAll()
-            return
+            return false
         }
 
         var didMove = false
@@ -56,8 +57,9 @@ public final class TrackpadActivityTracker {
 
         previousContactsByIdentifier = nextContactsByIdentifier
 
-        guard didMove else { return }
+        guard didMove else { return false }
         markActive(now: now)
+        return true
     }
 
     public func markActive(now: Date = Date()) {

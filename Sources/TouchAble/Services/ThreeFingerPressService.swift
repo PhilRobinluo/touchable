@@ -1,4 +1,5 @@
 import ApplicationServices
+import AppKit
 import CoreFoundation
 import Darwin
 import Foundation
@@ -24,6 +25,7 @@ final class ThreeFingerPressService {
     private var devices: [MTDeviceRef] = []
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var pressureMonitor: Any?
     private var lastTouchDebugDate: Date = .distantPast
     private var lastTouchDebugCount = -1
 
@@ -37,10 +39,12 @@ final class ThreeFingerPressService {
         Self.activeService = self
         startMultitouch()
         startMouseDownTap()
+        startPressureMonitor()
     }
 
     func stop() {
         stopMouseDownTap()
+        stopPressureMonitor()
         stopMultitouch()
         lock.withLock {
             recognizer.reset()
@@ -55,7 +59,7 @@ final class ThreeFingerPressService {
         lock.withLock {
             recognizer.updateTouchCount(3)
         }
-        handleMouseDown(location: location)
+        handlePressSignal(source: "debug", pressure: 1.0, location: location)
     }
 
     private func startMultitouch() {
@@ -126,7 +130,7 @@ final class ThreeFingerPressService {
         CGEvent.tapEnable(tap: tap, enable: true)
         eventTap = tap
         runLoopSource = source
-        emitDebug("三指按下 mouseDown 监听已启动")
+        emitDebug("三指按压 mouseDown 监听已启动")
     }
 
     private func stopMouseDownTap() {
@@ -142,6 +146,27 @@ final class ThreeFingerPressService {
         runLoopSource = nil
     }
 
+    private func startPressureMonitor() {
+        guard pressureMonitor == nil else { return }
+
+        pressureMonitor = NSEvent.addGlobalMonitorForEvents(matching: .pressure) { [weak self] event in
+            guard event.stage >= 1 || event.pressure >= 0.70 else { return }
+            self?.handlePressSignal(
+                source: "pressure",
+                pressure: Double(max(event.pressure, Float(event.stage))),
+                location: NSEvent.mouseLocation
+            )
+        }
+        emitDebug("三指按压 pressure 监听已启动")
+    }
+
+    private func stopPressureMonitor() {
+        if let pressureMonitor {
+            NSEvent.removeMonitor(pressureMonitor)
+        }
+        pressureMonitor = nil
+    }
+
     private func handleTouchFrame(fingerCount: Int, timestamp: Double, frame: Int32) {
         lock.withLock {
             recognizer.updateTouchCount(fingerCount)
@@ -152,17 +177,17 @@ final class ThreeFingerPressService {
         }
     }
 
-    private func handleMouseDown(location: CGPoint) {
+    private func handlePressSignal(source: String, pressure: Double, location: CGPoint) {
         let recognition = lock.withLock {
-            recognizer.press()
+            recognizer.press(pressure: pressure)
         }
 
         guard let recognition else {
-            emitDebug("mouseDown · 未命中三指")
+            emitDebug("\(source) · 未命中三指按压 · pressure \(String(format: "%.2f", pressure))")
             return
         }
 
-        emitDebug("mouseDown · 命中三指 \(recognition.touchCount)")
+        emitDebug("\(source) · 命中三指按压 \(recognition.touchCount) · pressure \(String(format: "%.2f", recognition.pressure))")
         DispatchQueue.main.async { [weak self] in
             self?.onPress?(ThreeFingerPressEvent(touchCount: recognition.touchCount, location: location))
         }
@@ -217,8 +242,9 @@ final class ThreeFingerPressService {
             .takeUnretainedValue()
 
         let location = event.location
+        let pressure = event.getDoubleValueField(.mouseEventPressure)
         DispatchQueue.main.async {
-            service.handleMouseDown(location: location)
+            service.handlePressSignal(source: "mouseDown", pressure: pressure, location: location)
         }
 
         return Unmanaged.passUnretained(event)

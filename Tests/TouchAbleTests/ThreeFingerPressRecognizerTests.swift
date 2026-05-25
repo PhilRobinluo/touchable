@@ -9,10 +9,10 @@ final class ThreeFingerPressRecognizerTests: XCTestCase {
         recognizer.updateTouchCount(3, now: start)
 
         XCTAssertEqual(
-            recognizer.press(now: start.addingTimeInterval(0.05)),
-            ThreeFingerPressRecognition(touchCount: 3)
+            recognizer.press(pressure: 0.9, now: start.addingTimeInterval(0.05)),
+            ThreeFingerPressRecognition(touchCount: 3, pressure: 0.9)
         )
-        XCTAssertNil(recognizer.press(now: start.addingTimeInterval(0.10)))
+        XCTAssertNil(recognizer.press(pressure: 0.9, now: start.addingTimeInterval(0.10)))
     }
 
     func testPressWithoutThreeFingerTouchDoesNotRecognize() {
@@ -21,7 +21,16 @@ final class ThreeFingerPressRecognizerTests: XCTestCase {
 
         recognizer.updateTouchCount(2, now: start)
 
-        XCTAssertNil(recognizer.press(now: start.addingTimeInterval(0.05)))
+        XCTAssertNil(recognizer.press(pressure: 0.9, now: start.addingTimeInterval(0.05)))
+    }
+
+    func testThreeFingerTouchWithoutPressureDoesNotRecognize() {
+        let recognizer = ThreeFingerPressRecognizer()
+        let start = Date(timeIntervalSince1970: 100)
+
+        recognizer.updateTouchCount(3, now: start)
+
+        XCTAssertNil(recognizer.press(pressure: 0.2, now: start.addingTimeInterval(0.05)))
     }
 
     func testStaleThreeFingerTouchDoesNotRecognize() {
@@ -30,7 +39,7 @@ final class ThreeFingerPressRecognizerTests: XCTestCase {
 
         recognizer.updateTouchCount(3, now: start)
 
-        XCTAssertNil(recognizer.press(now: start.addingTimeInterval(0.40)))
+        XCTAssertNil(recognizer.press(pressure: 0.9, now: start.addingTimeInterval(0.40)))
     }
 
     func testPressRecognizesAfterTouchCountTemporarilyDrops() {
@@ -41,8 +50,8 @@ final class ThreeFingerPressRecognizerTests: XCTestCase {
         recognizer.updateTouchCount(2, now: start.addingTimeInterval(0.05))
 
         XCTAssertEqual(
-            recognizer.press(now: start.addingTimeInterval(0.10)),
-            ThreeFingerPressRecognition(touchCount: 3)
+            recognizer.press(pressure: 0.9, now: start.addingTimeInterval(0.10)),
+            ThreeFingerPressRecognition(touchCount: 3, pressure: 0.9)
         )
     }
 
@@ -51,14 +60,14 @@ final class ThreeFingerPressRecognizerTests: XCTestCase {
         let start = Date(timeIntervalSince1970: 100)
 
         recognizer.updateTouchCount(3, now: start)
-        XCTAssertNotNil(recognizer.press(now: start.addingTimeInterval(0.05)))
+        XCTAssertNotNil(recognizer.press(pressure: 0.9, now: start.addingTimeInterval(0.05)))
 
         recognizer.updateTouchCount(0, now: start.addingTimeInterval(0.10))
         recognizer.updateTouchCount(3, now: start.addingTimeInterval(0.60))
 
         XCTAssertEqual(
-            recognizer.press(now: start.addingTimeInterval(0.65)),
-            ThreeFingerPressRecognition(touchCount: 3)
+            recognizer.press(pressure: 0.9, now: start.addingTimeInterval(0.65)),
+            ThreeFingerPressRecognition(touchCount: 3, pressure: 0.9)
         )
     }
 
@@ -68,9 +77,6 @@ final class ThreeFingerPressRecognizerTests: XCTestCase {
 
         recognizer.updateTouchCount(4, now: start)
 
-        XCTAssertEqual(
-            recognizer.press(now: start.addingTimeInterval(0.05)),
-            ThreeFingerPressRecognition(touchCount: 4)
-        )
+        XCTAssertNil(recognizer.press(pressure: 0.9, now: start.addingTimeInterval(0.05)))
     }
 }

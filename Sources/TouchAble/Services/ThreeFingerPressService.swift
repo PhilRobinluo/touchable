@@ -1,4 +1,3 @@
-import ApplicationServices
 import AppKit
 import CoreFoundation
 import Darwin
@@ -23,8 +22,6 @@ final class ThreeFingerPressService {
 
     private var multitouch: MultitouchSupportBridge?
     private var devices: [MTDeviceRef] = []
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
     private var pressureMonitor: Any?
     private var lastTouchDebugDate: Date = .distantPast
     private var lastTouchDebugCount = -1
@@ -34,16 +31,14 @@ final class ThreeFingerPressService {
     }
 
     func start() {
-        guard eventTap == nil else { return }
+        guard multitouch == nil, pressureMonitor == nil else { return }
 
         Self.activeService = self
         startMultitouch()
-        startMouseDownTap()
         startPressureMonitor()
     }
 
     func stop() {
-        stopMouseDownTap()
         stopPressureMonitor()
         stopMultitouch()
         lock.withLock {
@@ -104,46 +99,6 @@ final class ThreeFingerPressService {
 
         devices.removeAll()
         self.multitouch = nil
-    }
-
-    private func startMouseDownTap() {
-        let mask =
-            (1 << CGEventType.leftMouseDown.rawValue) |
-            (1 << CGEventType.rightMouseDown.rawValue) |
-            (1 << CGEventType.otherMouseDown.rawValue)
-
-        let userInfo = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .listenOnly,
-            eventsOfInterest: CGEventMask(mask),
-            callback: Self.mouseCallback,
-            userInfo: userInfo
-        ) else {
-            emitDebug("三指按下监听失败：需要输入监控权限")
-            return
-        }
-
-        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
-        eventTap = tap
-        runLoopSource = source
-        emitDebug("三指按压 mouseDown 监听已启动")
-    }
-
-    private func stopMouseDownTap() {
-        if let eventTap {
-            CGEvent.tapEnable(tap: eventTap, enable: false)
-        }
-
-        if let runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
-        }
-
-        eventTap = nil
-        runLoopSource = nil
     }
 
     private func startPressureMonitor() {
@@ -232,23 +187,6 @@ final class ThreeFingerPressService {
         return 0
     }
 
-    private static let mouseCallback: CGEventTapCallBack = { _, _, event, userInfo in
-        guard let userInfo else {
-            return Unmanaged.passUnretained(event)
-        }
-
-        let service = Unmanaged<ThreeFingerPressService>
-            .fromOpaque(userInfo)
-            .takeUnretainedValue()
-
-        let location = event.location
-        let pressure = event.getDoubleValueField(.mouseEventPressure)
-        DispatchQueue.main.async {
-            service.handlePressSignal(source: "mouseDown", pressure: pressure, location: location)
-        }
-
-        return Unmanaged.passUnretained(event)
-    }
 }
 
 private typealias MTDeviceRef = UnsafeMutableRawPointer

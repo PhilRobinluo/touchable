@@ -9,6 +9,7 @@ final class PreferenceStore: ObservableObject {
         static let edgeHapticsEnabled = "edgeHapticsEnabled"
         static let pointerEventHapticsEnabled = "pointerEventHapticsEnabled"
         static let scrollHapticsEnabled = "scrollHapticsEnabled"
+        static let trackpadOnlyHapticsEnabled = "trackpadOnlyHapticsEnabled"
         static let cursorHapticsEnabled = "cursorHapticsEnabled"
         static let semanticHapticsEnabled = "semanticHapticsEnabled"
         static let strength = "strength"
@@ -40,6 +41,10 @@ final class PreferenceStore: ObservableObject {
 
     @Published var scrollHapticsEnabled: Bool {
         didSet { defaults.set(scrollHapticsEnabled, forKey: Key.scrollHapticsEnabled) }
+    }
+
+    @Published var trackpadOnlyHapticsEnabled: Bool {
+        didSet { defaults.set(trackpadOnlyHapticsEnabled, forKey: Key.trackpadOnlyHapticsEnabled) }
     }
 
     @Published var cursorHapticsEnabled: Bool {
@@ -97,6 +102,7 @@ final class PreferenceStore: ObservableObject {
         edgeHapticsEnabled = defaults.object(forKey: Key.edgeHapticsEnabled) as? Bool ?? true
         pointerEventHapticsEnabled = defaults.object(forKey: Key.pointerEventHapticsEnabled) as? Bool ?? true
         scrollHapticsEnabled = defaults.object(forKey: Key.scrollHapticsEnabled) as? Bool ?? false
+        trackpadOnlyHapticsEnabled = defaults.object(forKey: Key.trackpadOnlyHapticsEnabled) as? Bool ?? true
         cursorHapticsEnabled = defaults.object(forKey: Key.cursorHapticsEnabled) as? Bool ?? true
         semanticHapticsEnabled = defaults.object(forKey: Key.semanticHapticsEnabled) as? Bool ?? true
 

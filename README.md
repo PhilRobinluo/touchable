@@ -24,6 +24,8 @@ The repository is open source so the idea can be explored in public.
   after Accessibility permission is granted.
 - Pointer-event haptics for clicks and drags after Input Monitoring is granted.
 - Optional scroll haptics, disabled by default.
+- Trackpad-only global haptics, enabled by default, so mouse input does not
+  waste haptic feedback or battery.
 - Configurable three-finger trackpad press shortcut mapping.
 - Cursor-shape haptics for I-beam, pointing hand, drag, resize, and related
   cursor transitions.
@@ -40,6 +42,8 @@ TouchAble is designed to use the narrowest data needed for haptic feedback:
 - Pointer event type and location.
 - Cursor shape.
 - Raw trackpad finger count for three-finger shortcut mapping.
+- Recent raw trackpad activity to ignore mouse-driven global haptic triggers by
+  default.
 - Accessibility role/subrole/action metadata for the UI element under the
   pointer.
 

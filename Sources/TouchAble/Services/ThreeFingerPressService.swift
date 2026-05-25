@@ -18,6 +18,7 @@ final class ThreeFingerPressService {
     private static let logger = Logger(subsystem: "com.philrobin.TouchAble", category: "ThreeFingerPress")
 
     private let recognizer = ThreeFingerPressRecognizer()
+    private let activityTracker = TrackpadActivityTracker()
     private let lock = NSLock()
 
     private var multitouch: MultitouchSupportBridge?
@@ -43,6 +44,7 @@ final class ThreeFingerPressService {
         stopMultitouch()
         lock.withLock {
             recognizer.reset()
+            activityTracker.reset()
         }
 
         if Self.activeService === self {
@@ -53,8 +55,15 @@ final class ThreeFingerPressService {
     func simulateThreeFingerPressForDebug(location: CGPoint) {
         lock.withLock {
             recognizer.updateTouchCount(3)
+            activityTracker.markActive()
         }
         handlePressSignal(source: "debug", pressure: 1.0, location: location)
+    }
+
+    func hasRecentTrackpadActivity(now: Date = Date(), within interval: TimeInterval = 0.75) -> Bool {
+        lock.withLock {
+            activityTracker.hasRecentTrackpadActivity(now: now, within: interval)
+        }
     }
 
     private func startMultitouch() {
@@ -122,14 +131,42 @@ final class ThreeFingerPressService {
         pressureMonitor = nil
     }
 
-    private func handleTouchFrame(fingerCount: Int, timestamp: Double, frame: Int32) {
+    private func handleTouchFrame(fingerCount: Int, timestamp: Double, frame: Int32, contacts: [MTContact]) {
         lock.withLock {
             recognizer.updateTouchCount(fingerCount)
+            let activeSamples = contacts
+                .filter(\.isActiveContact)
+                .map(\.trackpadSample)
+            activityTracker.update(contacts: activeSamples)
+        }
+
+        if let rawPressure = rawForcePressure(from: contacts) {
+            handlePressSignal(source: "rawForceTouch", pressure: rawPressure, location: NSEvent.mouseLocation)
         }
 
         if fingerCount > 0 {
-            emitTouchDebug(fingerCount: fingerCount, timestamp: timestamp, frame: frame)
+            emitTouchDebug(fingerCount: fingerCount, timestamp: timestamp, frame: frame, contacts: contacts)
         }
+    }
+
+    private func rawForcePressure(from contacts: [MTContact]) -> Double? {
+        guard contacts.count == 3 else { return nil }
+
+        let activeContacts = contacts.filter { $0.state != 7 && $0.size > 0 }
+        guard activeContacts.count == 3 else { return nil }
+
+        let sizes = activeContacts.map { Double($0.size) }
+        let minimumSize = sizes.min() ?? 0
+        let averageSize = sizes.reduce(0, +) / Double(sizes.count)
+        let forceStateCount = activeContacts.filter { contact in
+            contact.state == 3 || contact.state == 4 || contact.state == 5 || contact.state == 6
+        }.count
+
+        guard minimumSize >= 0.55, averageSize >= 0.75, forceStateCount >= 2 else {
+            return nil
+        }
+
+        return min(1.0, averageSize)
     }
 
     private func handlePressSignal(source: String, pressure: Double, location: CGPoint) {
@@ -156,7 +193,7 @@ final class ThreeFingerPressService {
         }
     }
 
-    private func emitTouchDebug(fingerCount: Int, timestamp: Double, frame: Int32) {
+    private func emitTouchDebug(fingerCount: Int, timestamp: Double, frame: Int32, contacts: [MTContact]) {
         let now = Date()
         let shouldEmit = fingerCount != lastTouchDebugCount ||
             now.timeIntervalSince(lastTouchDebugDate) >= 0.5
@@ -164,7 +201,13 @@ final class ThreeFingerPressService {
 
         lastTouchDebugCount = fingerCount
         lastTouchDebugDate = now
-        emitDebug("rawTouch · fingers \(fingerCount) · frame \(frame) · \(String(format: "%.3f", timestamp))")
+        let contactSummary = contacts
+            .prefix(5)
+            .map { contact in
+                "id \(contact.identifier) state \(contact.state) size \(String(format: "%.3f", contact.size)) major \(String(format: "%.3f", contact.majorAxis)) minor \(String(format: "%.3f", contact.minorAxis))"
+            }
+            .joined(separator: " | ")
+        emitDebug("rawTouch · fingers \(fingerCount) · frame \(frame) · \(String(format: "%.3f", timestamp)) · \(contactSummary)")
     }
 
     private static func appendDebugLine(_ detail: String) {
@@ -182,8 +225,13 @@ final class ThreeFingerPressService {
         }
     }
 
-    private static let touchCallback: MTContactCallbackFunction = { _, _, fingerCount, timestamp, frame in
-        activeService?.handleTouchFrame(fingerCount: Int(fingerCount), timestamp: timestamp, frame: frame)
+    private static let touchCallback: MTContactCallbackFunction = { _, data, fingerCount, timestamp, frame in
+        var contacts: [MTContact] = []
+        if let data {
+            let contactData = data.assumingMemoryBound(to: MTContact.self)
+            contacts = (0..<Int(fingerCount)).map { contactData[$0] }
+        }
+        activeService?.handleTouchFrame(fingerCount: Int(fingerCount), timestamp: timestamp, frame: frame, contacts: contacts)
         return 0
     }
 
@@ -197,6 +245,51 @@ private typealias MTContactCallbackFunction = @convention(c) (
     Double,
     Int32
 ) -> Int32
+
+private struct MTPoint {
+    var x: Float
+    var y: Float
+}
+
+private struct MTVector {
+    var position: MTPoint
+    var velocity: MTPoint
+}
+
+private struct MTContact {
+    var frame: Int32
+    var timestamp: Double
+    var identifier: Int32
+    var state: Int32
+    var unknown1: Int32
+    var unknown2: Int32
+    var normalized: MTVector
+    var size: Float
+    var unknown3: Int32
+    var angle: Float
+    var majorAxis: Float
+    var minorAxis: Float
+    var unknown4: MTVector
+    var unknown5_1: Int32
+    var unknown5_2: Int32
+    var unknown6: Float
+}
+
+private extension MTContact {
+    var isActiveContact: Bool {
+        state != 7 && size > 0
+    }
+
+    var trackpadSample: TrackpadContactSample {
+        TrackpadContactSample(
+            identifier: Int(identifier),
+            x: Double(normalized.position.x),
+            y: Double(normalized.position.y),
+            velocityX: Double(normalized.velocity.x),
+            velocityY: Double(normalized.velocity.y)
+        )
+    }
+}
 
 private final class MultitouchSupportBridge {
     private typealias MTDeviceCreateListFunction = @convention(c) () -> Unmanaged<CFArray>?

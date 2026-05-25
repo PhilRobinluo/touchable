@@ -21,6 +21,7 @@ struct TouchAbleMenuView: View {
             Toggle("边缘触感", isOn: $preferences.edgeHapticsEnabled)
             Toggle("点击 / 拖拽触感", isOn: $preferences.pointerEventHapticsEnabled)
             Toggle("滚动触感", isOn: $preferences.scrollHapticsEnabled)
+            Toggle("仅触控板触发", isOn: $preferences.trackpadOnlyHapticsEnabled)
             Toggle("光标触感", isOn: $preferences.cursorHapticsEnabled)
             Toggle("语义触感", isOn: $preferences.semanticHapticsEnabled)
 

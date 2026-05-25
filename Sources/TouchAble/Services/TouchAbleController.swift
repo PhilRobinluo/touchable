@@ -12,6 +12,7 @@ final class TouchAbleController: ObservableObject {
     @Published private(set) var pointerDescription = "未读取"
     @Published private(set) var cursorDescription = "未读取"
     @Published private(set) var semanticRole = "未探测"
+    @Published private(set) var inputSourceDescription = "未识别"
     @Published private(set) var pointerEventDescription = "未收到"
     @Published private(set) var threeFingerShortcutDescription = "未启用"
     @Published private(set) var candidateDescription = "等待"
@@ -26,6 +27,7 @@ final class TouchAbleController: ObservableObject {
     private let inputMonitoring = InputMonitoringPermissionService()
     private let haptics = HapticFeedbackService()
     private let pointerEventTap = PointerEventTapService()
+    private let pointerSource = PointerSourceService()
     private let threeFingerPress = ThreeFingerPressService()
     private let shortcutSender = KeyboardShortcutSender()
     private let cursorProbe = CursorProbeService()
@@ -48,7 +50,8 @@ final class TouchAbleController: ObservableObject {
         accessibilityTrusted = accessibility.isTrusted
         inputMonitoringTrusted = inputMonitoring.isTrusted
         configurePointerEvents()
-        configureThreeFingerPressIfNeeded()
+        configurePointerSourceMonitoring()
+        configureTrackpadInputMonitoring()
         observeTimingPreferences()
         start()
     }
@@ -56,6 +59,7 @@ final class TouchAbleController: ObservableObject {
     deinit {
         timer?.invalidate()
         pointerEventTap.stop()
+        pointerSource.stop()
         threeFingerPress.stop()
     }
 
@@ -98,12 +102,12 @@ final class TouchAbleController: ObservableObject {
             .removeDuplicates()
             .dropFirst()
             .sink { [weak self] isEnabled in
-                if isEnabled {
-                    self?.configureThreeFingerPressIfNeeded()
-                } else {
-                    self?.threeFingerPress.stop()
-                    self?.record(title: "三指快捷键监听已关闭", detail: "不再监听三指触摸事件", zone: nil)
-                }
+                self?.configureTrackpadInputMonitoring()
+                self?.record(
+                    title: isEnabled ? "三指快捷键已开启" : "三指快捷键已关闭",
+                    detail: isEnabled ? "三指按下会发送映射快捷键" : "仍保留触控板输入识别，用于过滤鼠标触发",
+                    zone: nil
+                )
                 self?.updateThreeFingerShortcutDescription()
             }
             .store(in: &cancellables)
@@ -175,13 +179,20 @@ final class TouchAbleController: ObservableObject {
         )
     }
 
-    private func configureThreeFingerPressIfNeeded() {
-        guard preferences.threeFingerShortcutEnabled else {
-            threeFingerPress.stop()
-            updateThreeFingerShortcutDescription()
-            return
+    private func configurePointerSourceMonitoring() {
+        pointerSource.onDebugEvent = { [weak self] detail in
+            self?.record(title: "输入来源探针", detail: detail, zone: nil)
         }
 
+        let started = pointerSource.start()
+        record(
+            title: started ? "输入来源监听已启动" : "输入来源监听失败",
+            detail: started ? "HID 正在监听鼠标设备的移动和滚轮" : "无法启动 HID 鼠标来源监听",
+            zone: nil
+        )
+    }
+
+    private func configureTrackpadInputMonitoring() {
         threeFingerPress.onPress = { [weak self] event in
             self?.handleThreeFingerPress(event)
         }
@@ -190,7 +201,7 @@ final class TouchAbleController: ObservableObject {
         }
         threeFingerPress.start()
         updateThreeFingerShortcutDescription()
-        record(title: "三指快捷键监听已启动", detail: "监听三指同时按下手势", zone: nil)
+        record(title: "触控板输入监听已启动", detail: "用于三指快捷键和仅触控板触发过滤", zone: nil)
     }
 
     private func handlePointerEvent(_ kind: PointerEventKind, location: CGPoint) {
@@ -207,6 +218,8 @@ final class TouchAbleController: ObservableObject {
         } else {
             guard preferences.pointerEventHapticsEnabled else { return }
         }
+
+        guard allowsGlobalHapticTrigger(context: kind.displayName) else { return }
 
         let profile = preferences.profile
         pointerEventCounter += 1
@@ -288,6 +301,13 @@ final class TouchAbleController: ObservableObject {
         guard pointerMovedEnough(pointerLocation) else {
             setText(\.candidateDescription, "光标静止")
             setText(\.lastDecision, "静止不触发")
+            return
+        }
+
+        guard allowsGlobalHapticTrigger(context: "光标移动") else {
+            throttler.reset()
+            lastZone = .quiet
+            lastTickPointerLocation = pointerLocation
             return
         }
 
@@ -414,10 +434,35 @@ final class TouchAbleController: ObservableObject {
         return signal
     }
 
+    private func allowsGlobalHapticTrigger(context: String) -> Bool {
+        guard preferences.trackpadOnlyHapticsEnabled else {
+            setText(\.inputSourceDescription, "不限制")
+            return true
+        }
+
+        if pointerSource.hasRecentExternalMouseActivity() {
+            setText(\.inputSourceDescription, "鼠标")
+            setText(\.candidateDescription, "仅触控板触发")
+            setText(\.lastDecision, "\(context) 来自鼠标，跳过")
+            return false
+        }
+
+        let hasRecentTrackpadActivity = threeFingerPress.hasRecentTrackpadActivity()
+        setText(\.inputSourceDescription, hasRecentTrackpadActivity ? "触控板" : "鼠标 / 未知")
+        guard hasRecentTrackpadActivity else {
+            setText(\.candidateDescription, "仅触控板触发")
+            setText(\.lastDecision, "\(context) 来自鼠标 / 未知，跳过")
+            return false
+        }
+
+        return true
+    }
+
     private func updateProfileDescription(_ profile: HapticProfile) {
         let repeatText = profile.sameIdentityRepeatInterval.map { String(format: "%.2fs", $0) } ?? "关闭"
         let modeText = profile.intensityLevel >= 6 ? "增强混合" : "标准"
-        let nextDescription = "强度 \(profile.intensityLevel) · \(profile.pulseCount) 次脉冲 · \(modeText) · 节流 \(String(format: "%.2fs", profile.minimumInterval)) · 轮询 \(Int(preferences.pointerPollingHertz.rounded()))Hz · 操作延时 \(String(format: "%.2fs", preferences.pointerEventDelay)) · 重触发 \(repeatText)"
+        let inputMode = preferences.trackpadOnlyHapticsEnabled ? "仅触控板" : "不限输入"
+        let nextDescription = "强度 \(profile.intensityLevel) · \(profile.pulseCount) 次脉冲 · \(modeText) · 节流 \(String(format: "%.2fs", profile.minimumInterval)) · 轮询 \(Int(preferences.pointerPollingHertz.rounded()))Hz · 操作延时 \(String(format: "%.2fs", preferences.pointerEventDelay)) · 重触发 \(repeatText) · \(inputMode)"
         if profileDescription != nextDescription {
             profileDescription = nextDescription
         }

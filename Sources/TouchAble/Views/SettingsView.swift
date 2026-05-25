@@ -29,6 +29,11 @@ struct SettingsView: View {
                     .onChange(of: preferences.scrollHapticsEnabled) { _, _ in
                         pulse(.control, "settings-scroll-change")
                     }
+                Toggle("仅触控板触发", isOn: $preferences.trackpadOnlyHapticsEnabled)
+                    .localPulse(zone: .control, identity: "settings-trackpad-only")
+                    .onChange(of: preferences.trackpadOnlyHapticsEnabled) { _, _ in
+                        pulse(.control, "settings-trackpad-only-change")
+                    }
                 Toggle("光标触感", isOn: $preferences.cursorHapticsEnabled)
                     .localPulse(zone: .control, identity: "settings-cursor")
                     .onChange(of: preferences.cursorHapticsEnabled) { _, _ in
@@ -134,7 +139,7 @@ struct SettingsView: View {
                     }
                 }
 
-                Text("悬停重复默认关闭，避免光标停在按钮上一直震。公开 API 不支持直接调电机力度；这里通过更多脉冲、更紧节奏和混合模式模拟强弱。6-8 档偏调试增强。")
+                Text("悬停重复默认关闭，避免光标停在按钮上一直震。仅触控板触发默认开启：使用鼠标移动、点击或滚动时不会触发全局触感。公开 API 不支持直接调电机力度；这里通过更多脉冲、更紧节奏和混合模式模拟强弱。6-8 档偏调试增强。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

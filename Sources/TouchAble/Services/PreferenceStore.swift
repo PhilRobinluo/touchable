@@ -98,27 +98,27 @@ final class PreferenceStore: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
-        isEnabled = defaults.object(forKey: Key.isEnabled) as? Bool ?? true
-        edgeHapticsEnabled = defaults.object(forKey: Key.edgeHapticsEnabled) as? Bool ?? true
-        pointerEventHapticsEnabled = defaults.object(forKey: Key.pointerEventHapticsEnabled) as? Bool ?? true
-        scrollHapticsEnabled = defaults.object(forKey: Key.scrollHapticsEnabled) as? Bool ?? false
-        trackpadOnlyHapticsEnabled = defaults.object(forKey: Key.trackpadOnlyHapticsEnabled) as? Bool ?? true
-        cursorHapticsEnabled = defaults.object(forKey: Key.cursorHapticsEnabled) as? Bool ?? true
-        semanticHapticsEnabled = defaults.object(forKey: Key.semanticHapticsEnabled) as? Bool ?? true
+        isEnabled = defaults.object(forKey: Key.isEnabled) as? Bool ?? PreferenceDefaults.isEnabled
+        edgeHapticsEnabled = defaults.object(forKey: Key.edgeHapticsEnabled) as? Bool ?? PreferenceDefaults.edgeHapticsEnabled
+        pointerEventHapticsEnabled = defaults.object(forKey: Key.pointerEventHapticsEnabled) as? Bool ?? PreferenceDefaults.pointerEventHapticsEnabled
+        scrollHapticsEnabled = defaults.object(forKey: Key.scrollHapticsEnabled) as? Bool ?? PreferenceDefaults.scrollHapticsEnabled
+        trackpadOnlyHapticsEnabled = defaults.object(forKey: Key.trackpadOnlyHapticsEnabled) as? Bool ?? PreferenceDefaults.trackpadOnlyHapticsEnabled
+        cursorHapticsEnabled = defaults.object(forKey: Key.cursorHapticsEnabled) as? Bool ?? PreferenceDefaults.cursorHapticsEnabled
+        semanticHapticsEnabled = defaults.object(forKey: Key.semanticHapticsEnabled) as? Bool ?? PreferenceDefaults.semanticHapticsEnabled
 
-        let rawStrength = defaults.string(forKey: Key.strength) ?? HapticStrength.standard.rawValue
-        strength = HapticStrength(rawValue: rawStrength) ?? .standard
+        let rawStrength = defaults.string(forKey: Key.strength) ?? PreferenceDefaults.strength.rawValue
+        strength = HapticStrength(rawValue: rawStrength) ?? PreferenceDefaults.strength
 
-        let savedIntensity = defaults.object(forKey: Key.intensityLevel) as? Int ?? 5
+        let savedIntensity = defaults.object(forKey: Key.intensityLevel) as? Int ?? PreferenceDefaults.intensityLevel
         intensityLevel = Double(max(1, min(8, savedIntensity)))
-        repeatSameTargetEnabled = defaults.object(forKey: Key.repeatSameTargetEnabled) as? Bool ?? false
-        let savedHoverRepeatInterval = defaults.object(forKey: Key.hoverRepeatInterval) as? Double ?? 1.1
+        repeatSameTargetEnabled = defaults.object(forKey: Key.repeatSameTargetEnabled) as? Bool ?? PreferenceDefaults.repeatSameTargetEnabled
+        let savedHoverRepeatInterval = defaults.object(forKey: Key.hoverRepeatInterval) as? Double ?? PreferenceDefaults.hoverRepeatInterval
         hoverRepeatInterval = max(0.25, min(2.0, savedHoverRepeatInterval))
-        let savedPollingHertz = defaults.object(forKey: Key.pointerPollingHertz) as? Double ?? 30
+        let savedPollingHertz = defaults.object(forKey: Key.pointerPollingHertz) as? Double ?? PreferenceDefaults.pointerPollingHertz
         pointerPollingHertz = max(10, min(80, savedPollingHertz))
-        let savedMinimumInterval = defaults.object(forKey: Key.hapticMinimumInterval) as? Double ?? 0.08
+        let savedMinimumInterval = defaults.object(forKey: Key.hapticMinimumInterval) as? Double ?? PreferenceDefaults.hapticMinimumInterval
         hapticMinimumInterval = max(0.04, min(0.35, savedMinimumInterval))
-        let savedPointerEventDelay = defaults.object(forKey: Key.pointerEventDelay) as? Double ?? 0
+        let savedPointerEventDelay = defaults.object(forKey: Key.pointerEventDelay) as? Double ?? PreferenceDefaults.pointerEventDelay
         pointerEventDelay = max(0, min(0.2, savedPointerEventDelay))
         if defaults.object(forKey: Key.threeFingerShortcutSafetyReset) as? Bool == true {
             threeFingerShortcutEnabled = defaults.object(forKey: Key.threeFingerShortcutEnabled) as? Bool ?? false
